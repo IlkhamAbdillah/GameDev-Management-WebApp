@@ -54,9 +54,10 @@ def run():
         # ---------------------------------------------------------------- connectivity
         print("== Connectivity (API Gateway-equivalent entry, Lambda, DynamoDB, S3)")
         status, body = http("GET", f"{ASSET}/health")
-        check("asset API /health -> Lambda + DynamoDB + S3", status == 200 and body["data"] == {"status": "ok", "dynamodb": "ok", "s3": "ok"}, body)
+        checks = (body.get("data") or {}).get("checks", {})
+        check("asset API /health -> Lambda + DynamoDB (assets, folders) + S3", status == 200 and set(checks) == {"assetsTable", "foldersTable", "bucket"} and all(c["ok"] for c in checks.values()), body)
         status, body = http("GET", f"{TASK}/health")
-        check("task API /health -> Lambda + DynamoDB", status == 200 and body["data"]["dynamodb"] == "ok", body)
+        check("task API /health -> Lambda + DynamoDB (tasks)", status == 200 and body["data"]["checks"]["tasksTable"]["ok"], body)
 
         # ---------------------------------------------------------------- folders
         print("== Folders")

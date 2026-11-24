@@ -20,7 +20,7 @@ export const assetsApi = {
 }
 
 /** Direct browser -> S3 upload through the pre-signed URL (XHR for upload progress). */
-function putToS3(ticket: UploadTicket, file: File, onProgress: (percent: number) => void): Promise<void> {
+export function putToS3(ticket: UploadTicket, file: File, onProgress: (percent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open(ticket.method, ticket.uploadUrl)

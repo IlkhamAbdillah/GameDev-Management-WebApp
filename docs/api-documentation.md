@@ -6,12 +6,18 @@ Success: `{"success": true, "data": ...}` · Error: `{"success": false, "message
 
 | Method | Path | Description | Success |
 |---|---|---|---|
-| GET | `/health` | Checks Lambda → DynamoDB and S3 connectivity | 200 |
+| GET | `/health` | Per-dependency health of the Asset API (assets table, folders table, S3 bucket) | 200 / 503 |
 | POST | `/assets` | Create asset | 201 |
 | GET | `/assets` | List assets. Optional query: `search` (name contains), `assetType`, `status` | 200 |
 | GET | `/assets/{assetId}` | Asset details | 200 |
 | PUT | `/assets/{assetId}` | Partial update of supplied fields | 200 |
 | DELETE | `/assets/{assetId}` | Delete asset | 204 (no body) |
+
+`/health` response: every dependency is probed separately and reported with its latency. `200` when all are reachable, `503` (`data.status: "degraded"`) otherwise; a failing check carries only the AWS error code, never details.
+```json
+{"success": true, "data": {"status": "ok", "checks": {
+  "assetsTable": {"ok": true, "ms": 166}, "foldersTable": {"ok": true, "ms": 104}, "bucket": {"ok": true, "ms": 100}}}}
+```
 
 Errors: `400` invalid payload, `404` asset/route not found, `500` generic internal error (details only in CloudWatch).
 
@@ -37,7 +43,7 @@ Real captured output: `docs/evidence/api-test-output.txt`.
 ## Tasks API (Phase 2) — `taskApiUrl`
 | Method | Path | Description | Success |
 |---|---|---|---|
-| GET | `/health` | DynamoDB connectivity | 200 |
+| GET | `/health` | Per-dependency health of the Task API (tasks table) | 200 / 503 |
 | POST | `/tasks` | Create task | 201 |
 | GET | `/tasks` | List tasks. Optional query: `search` (title contains), `status`, `priority`, `category`, `assignee`. Sorted by `dueDate` (undated last) | 200 |
 | GET | `/tasks/{taskId}` | Task details | 200 |

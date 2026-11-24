@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from database import AssetNotFound, AssetRepository, FolderNotFound, FolderRepository
 from filetypes import DEFAULT_MAX_UPLOAD_BYTES, asset_prefix, file_name_from_key, preview_kind
@@ -46,6 +47,33 @@ def _ok(data, status=200):
 
 def _error(status, message):
     return _response(status, {"success": False, "message": message})
+
+
+def _probe(check):
+    """Run one dependency check; report ok/latency, and only the AWS error *code* on failure."""
+    started = time.perf_counter()
+    try:
+        check()
+        return {"ok": True, "ms": round((time.perf_counter() - started) * 1000)}
+    except Exception as err:  # noqa: BLE001 - a health check must never raise
+        logger.warning("Health check failed: %s", err)
+        code = getattr(err, "response", {}).get("Error", {}).get("Code") or type(err).__name__
+        return {"ok": False, "ms": round((time.perf_counter() - started) * 1000), "error": code}
+
+
+def _health(checks):
+    """200 when every dependency is reachable, otherwise 503 with the per-dependency results."""
+    results = {name: _probe(check) for name, check in checks.items()}
+    if all(r["ok"] for r in results.values()):
+        return _ok({"status": "ok", "checks": results})
+    return _response(
+        503,
+        {
+            "success": False,
+            "message": "One or more dependencies are unavailable",
+            "data": {"status": "degraded", "checks": results},
+        },
+    )
 
 
 def _parse_body(event):
@@ -154,10 +182,9 @@ def handle(event, repo, storage, folders):
 
     try:
         if path == "/health" and method == "GET":
-            repo.ping()
-            folders.ping()
-            storage.ping()
-            return _ok({"status": "ok", "dynamodb": "ok", "s3": "ok"})
+            return _health(
+                {"assetsTable": repo.ping, "foldersTable": folders.ping, "bucket": storage.ping}
+            )
 
         if path == "/folders":
             if method == "POST":

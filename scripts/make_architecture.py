@@ -8,7 +8,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch  # noqa: E402
 
-OUT = Path(__file__).resolve().parents[1] / "docs" / "architecture.png"
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "docs" / "architecture.png"
+FRONTEND_COPY = ROOT / "frontend" / "public" / "architecture.png"  # shown on the /docs page
 BG, PANEL, LINE, TEXT, MUTED = "#0d111a", "#151b27", "#3a4660", "#e6eaf2", "#8b97ad"
 BLUE, GREEN, ORANGE, PURPLE, RED = "#6d8cff", "#4fbf8b", "#f0a04b", "#b08cff", "#ff7a7a"
 
@@ -79,4 +81,6 @@ for i, (c, st, t) in enumerate([(BLUE, "-", "Request flow"), (GREEN, "-", "Data 
 ax.text(3, 9, "No authentication in the academic MVP\n(documented limitation).", color=RED, fontsize=8, va="center")
 
 fig.savefig(OUT, facecolor=BG, bbox_inches="tight", pad_inches=0.3)
-print(f"wrote {OUT}")
+FRONTEND_COPY.parent.mkdir(exist_ok=True)
+FRONTEND_COPY.write_bytes(OUT.read_bytes())
+print(f"wrote {OUT} and {FRONTEND_COPY}")

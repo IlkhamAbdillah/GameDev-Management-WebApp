@@ -1,10 +1,15 @@
-import { Boxes, CalendarRange, KanbanSquare, Vault } from 'lucide-react'
+import { Activity, BookOpen, Boxes, CalendarRange, KanbanSquare, Vault } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 const NAV = [
   { to: '/assets', label: 'Assets', icon: Boxes },
   { to: '/tasks', label: 'Tasks', icon: KanbanSquare },
   { to: '/timeline', label: 'Timeline', icon: CalendarRange },
+]
+
+const SYSTEM_NAV = [
+  { to: '/docs', label: 'Docs', icon: BookOpen },
+  { to: '/connectivity', label: 'Connectivity', icon: Activity },
 ]
 
 export default function Layout() {
@@ -21,21 +26,25 @@ export default function Layout() {
           </div>
         </div>
 
-        <nav className="flex flex-1 gap-1 md:flex-col">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  isActive ? 'bg-accent/15 text-white' : 'text-slate-400 hover:bg-surface-2 hover:text-slate-200'
-                }`
-              }
-            >
-              <Icon size={17} />
-              {label}
-            </NavLink>
-          ))}
+        <nav className="flex flex-1 flex-wrap gap-1 md:flex-col md:flex-nowrap">
+          {[...NAV, null, ...SYSTEM_NAV].map((item) =>
+            item === null ? (
+              <div key="system" className="hidden px-3 pt-4 pb-1 text-[11px] font-medium tracking-wide text-slate-500 uppercase md:block">System</div>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                    isActive ? 'bg-accent/15 text-white' : 'text-slate-400 hover:bg-surface-2 hover:text-slate-200'
+                  }`
+                }
+              >
+                <item.icon size={17} />
+                {item.label}
+              </NavLink>
+            ),
+          )}
         </nav>
 
         <div className="hidden rounded-xl border border-line bg-bg/40 p-3 text-xs text-slate-400 md:block">

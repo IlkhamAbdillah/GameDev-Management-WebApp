@@ -70,7 +70,7 @@ def test_asset_lambda_entrypoint_end_to_end():
         lambda_handler = fresh_handler("asset-handler").lambda_handler
 
         health = lambda_handler(event("GET", "/health"), None)
-        assert health["statusCode"] == 200 and json.loads(health["body"])["data"]["s3"] == "ok"
+        assert health["statusCode"] == 200 and json.loads(health["body"])["data"]["checks"]["bucket"]["ok"] is True
 
         folder = json.loads(lambda_handler(event("POST", "/folders", {"name": "Props"}), None)["body"])["data"]
         created = lambda_handler(

@@ -10,7 +10,7 @@ Lightweight game-development workspace for small indie teams: asset library (Ass
 
 ![GameVault architecture](docs/architecture.png)
 
-Request flow: client → Lambda Function URL → Lambda → DynamoDB / S3 (files travel straight between the browser and S3 through pre-signed URLs). Regenerate the diagram with `.venv/bin/python scripts/make_architecture.py`.
+Request flow: client → Lambda Function URL → Lambda → DynamoDB / S3 (files travel straight between the browser and S3 through pre-signed URLs). Regenerate the diagram with `.venv/bin/python scripts/make_architecture.py` (it also refreshes the copy shown on the Docs page).
 
 Security boundaries: the bucket is private (Block Public Access on, SSE-S3); the browser never sees AWS credentials; only the Lambda role can reach DynamoDB/S3.
 
@@ -50,7 +50,7 @@ python3 -m venv .venv && .venv/bin/pip install boto3 pytest moto
    ```
    It creates/updates the DynamoDB tables, private S3 bucket, both Lambdas and their Function URLs, and writes the URLs to `.aws/outputs.json`.
    Some Learner Lab sessions deny `dynamodb:CreateTable` (it is denied for the `voclabs` role); the script then warns — create the table in the console (partition key as printed, String, on-demand) and rerun.
-3. Smoke test: `curl $ASSET_URL/health` and `curl $TASK_URL/health`.
+3. Smoke test: `curl $ASSET_URL/health` and `curl $TASK_URL/health` (or open the Connectivity page).
 
 ## Frontend
 ```bash
@@ -60,6 +60,8 @@ npm install && npm run dev
 ```
 Assets: nested folders (create/rename/move/delete-when-empty, breadcrumb, drag an asset onto a folder to move it), grid/list view, search (across all folders) + category/status filters, create/edit/delete, direct-to-S3 upload with progress, download, and inline preview: images (thumbnails), audio, and **`.glb` 3D models** (interactive rotate/zoom via `<model-viewer>`, loaded lazily). Clicking an asset opens a two-column dialog: a large preview on the left (a newly chosen file previews before it is uploaded) and the details (name, category, status, folder, assignee, description) on the right. In the grid, `.glb` models get a rendered thumbnail: models are rendered one at a time in the browser, captured as a PNG and cached in IndexedDB by S3 key, so each model is rendered once per browser (not stored on the server). Other 3D formats (fbx/obj/gltf) and files are download-only.
 
+**Docs** (`/docs`): in-app documentation of the architecture (diagram and design decisions), tech stack, data model, the full API reference (collapsible endpoints with parameters and examples; data in `frontend/src/content/apiSpec.ts`) and security notes. **Connectivity** (`/connectivity`): runs the health checks for every service on load (browser → Lambda Function URLs, Lambda → each DynamoDB table, Lambda → S3, with latency and the failing AWS error code) and offers a *full round-trip test* that creates and then deletes a temporary asset (with a direct browser → S3 upload/download) and task, to prove writes, S3 CORS/pre-signed URLs and the Timeline work end to end.
+
 Timeline: simplified Gantt chart (bar position = start date, length = duration, colour = status: gray/blue/orange/green), range navigation (prev/next/today, 2 weeks to 3 months), status and category filters, red/amber highlighting for overdue and due-within-3-days tasks, and completion statistics. It calls `GET /timeline` for the visible window, so edits made on the Tasks page show up on the next load.
 
 Kanban supports drag-and-drop between columns (optimistic update with rollback), create/edit/delete, and search/status/priority/category/assignee filters (applied client-side over the fetched list).
@@ -68,8 +70,8 @@ Credentials expire with each lab session; rerun step 1 and the script is safe to
 
 ## Testing
 ```bash
-.venv/bin/python -m pytest tests -q          # 103 backend tests (moto)
-cd frontend && npm test && npm run build     # 21 unit tests + strict type-check/build
+.venv/bin/python -m pytest tests -q          # 105 backend tests (moto)
+cd frontend && npm test && npm run build     # 33 unit tests + strict type-check/build
 .venv/bin/python scripts/smoke_test.py       # 54 live checks against the deployed AWS stack
 ```
 A Postman collection is in `postman/`. Details and the mapping to the specification's checklist: [docs/testing.md](docs/testing.md). CI (`.github/workflows/ci.yml`) runs the backend and frontend tests on every push.

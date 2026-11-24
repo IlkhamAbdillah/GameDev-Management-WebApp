@@ -164,7 +164,10 @@ def test_delete_missing_asset_returns_404(deps):
 # ---- misc ----
 def test_health_checks_dynamodb_and_s3(deps):
     status, body = call(deps, "GET", "/health")
-    assert status == 200 and body["data"]["s3"] == "ok"
+    checks = body["data"]["checks"]
+    assert status == 200 and body["data"]["status"] == "ok"
+    assert set(checks) == {"assetsTable", "foldersTable", "bucket"}
+    assert all(c["ok"] and c["ms"] >= 0 for c in checks.values())
 
 
 def test_unknown_route_and_method(deps):
@@ -460,3 +463,18 @@ def test_only_empty_folders_can_be_deleted(deps):
 
 def test_health_checks_folders_table_too(deps):
     assert call(deps, "GET", "/health")[0] == 200
+
+
+def test_health_reports_each_dependency_and_returns_503_when_degraded(deps):
+    class Down:
+        def ping(self):
+            raise RuntimeError("secret internals: arn:aws:...")
+
+    event = {"rawPath": "/health", "requestContext": {"http": {"method": "GET"}}}
+    res = handler.handle(event, deps[0], Down(), deps[2])  # bucket down, tables fine
+    body = json.loads(res["body"])
+    assert res["statusCode"] == 503 and body["success"] is False
+    assert body["data"]["status"] == "degraded"
+    assert body["data"]["checks"]["assetsTable"]["ok"] is True
+    assert body["data"]["checks"]["bucket"] == {"ok": False, "ms": body["data"]["checks"]["bucket"]["ms"], "error": "RuntimeError"}
+    assert "secret" not in res["body"] and "arn:" not in res["body"]  # only an error code, never details

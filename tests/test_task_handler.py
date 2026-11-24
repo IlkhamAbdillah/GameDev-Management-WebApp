@@ -173,7 +173,8 @@ def test_delete_task(repo):
 
 
 def test_health_unknown_route_and_hidden_errors(repo):
-    assert call(repo, "GET", "/health")[1]["data"]["dynamodb"] == "ok"
+    health = call(repo, "GET", "/health")[1]["data"]
+    assert health["status"] == "ok" and health["checks"]["tasksTable"]["ok"] is True
     assert call(repo, "GET", "/nothing")[0] == 404
 
     class Broken:
@@ -283,3 +284,14 @@ def test_timeline_empty(repo):
 def test_timeline_rejects_bad_query(repo, query):
     status, body = call(repo, "GET", "/timeline", query=query)
     assert status == 400 and body["success"] is False
+
+
+def test_health_returns_503_when_the_table_is_unreachable(repo):
+    class Down:
+        def ping(self):
+            raise RuntimeError("boom")
+
+    event = {"rawPath": "/health", "requestContext": {"http": {"method": "GET"}}}
+    res = handler.handle(event, Down())
+    body = json.loads(res["body"])
+    assert res["statusCode"] == 503 and body["data"]["checks"]["tasksTable"]["error"] == "RuntimeError"
