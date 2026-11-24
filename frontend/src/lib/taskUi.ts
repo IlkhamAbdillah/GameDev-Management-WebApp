@@ -1,4 +1,5 @@
 import type { Task, TaskPriority, TaskStatus } from '../types'
+import { parseLocalDate } from './dates'
 
 export const PRIORITY_STYLE: Record<TaskPriority, string> = {
   Low: 'bg-slate-500/15 text-slate-300 ring-slate-500/30',
@@ -15,11 +16,6 @@ export const STATUS_DOT: Record<TaskStatus, string> = {
 }
 
 const DAY_MS = 86_400_000
-
-function parseLocalDate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
 
 export function formatDate(iso: string): string {
   if (!iso) return 'No due date'
@@ -44,4 +40,12 @@ export const DUE_STYLE: Record<DueState, string> = {
   soon: 'text-amber-300',
   normal: 'text-slate-400',
   done: 'text-slate-500',
+}
+
+/** Gantt bar colors by status: gray / blue / orange / green. */
+export const STATUS_BAR: Record<TaskStatus, string> = {
+  'To Do': 'bg-slate-500',
+  'In Progress': 'bg-blue-500',
+  'In Review': 'bg-orange-500',
+  Done: 'bg-green-600',
 }

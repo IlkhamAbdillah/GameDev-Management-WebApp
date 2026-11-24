@@ -3,9 +3,16 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
 
 from database import TaskNotFound, TaskRepository
-from validation import ValidationError, validate_date_order, validate_task_payload
+from timeline import build_timeline
+from validation import (
+    ValidationError,
+    validate_date_order,
+    validate_task_payload,
+    validate_timeline_query,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -51,8 +58,8 @@ def _update(repo, task_id, event):
     return repo.update(task_id, fields)
 
 
-def handle(event, repo):
-    """Pure routing function; the repository is injected so it can be unit tested."""
+def handle(event, repo, today=None):
+    """Pure routing function; the repository (and today) are injected for unit tests."""
     http = event.get("requestContext", {}).get("http", {})
     method = http.get("method", "")
     path = event.get("rawPath", "").rstrip("/") or "/"
@@ -62,6 +69,14 @@ def handle(event, repo):
         if path == "/health" and method == "GET":
             repo.ping()
             return _ok({"status": "ok", "dynamodb": "ok"})
+
+        if path == "/timeline" and method == "GET":
+            q = validate_timeline_query(query)
+            tasks = repo.list(
+                status=q.get("status"), category=q.get("category"), assignee=q.get("assignee")
+            )
+            today = today or datetime.now(timezone.utc).date()
+            return _ok(build_timeline(tasks, q.get("startDate", ""), q.get("endDate", ""), today))
 
         if path == "/tasks":
             if method == "POST":

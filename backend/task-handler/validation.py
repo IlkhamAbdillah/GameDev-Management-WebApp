@@ -92,3 +92,26 @@ def validate_task_payload(payload, partial=False):
 
     validate_date_order(clean.get("startDate", ""), clean.get("dueDate", ""))
     return clean
+
+
+def validate_timeline_query(query):
+    """Validate GET /timeline query parameters; returns only the supplied, cleaned ones."""
+    clean = {}
+    for field in ("startDate", "endDate"):
+        if query.get(field):
+            clean[field] = _clean_date(query, field)
+    if "status" in query and query["status"]:
+        if query["status"] not in STATUSES:
+            raise ValidationError(f"status must be one of: {', '.join(STATUSES)}")
+        clean["status"] = query["status"]
+    if "category" in query and query["category"]:
+        if query["category"] not in CATEGORIES:
+            raise ValidationError(f"category must be one of: {', '.join(CATEGORIES)}")
+        clean["category"] = query["category"]
+    if query.get("assignee"):
+        if len(query["assignee"]) > MAX_LENGTHS["assignee"]:
+            raise ValidationError("assignee is too long")
+        clean["assignee"] = query["assignee"]
+    if clean.get("startDate") and clean.get("endDate") and clean["endDate"] < clean["startDate"]:
+        raise ValidationError("endDate must not be before startDate")
+    return clean

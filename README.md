@@ -4,7 +4,7 @@
 
 Lightweight game-development workspace for small indie teams: asset library (Assets), Kanban task board (Tasks) and Gantt-style schedule (Timeline). Built on an AWS serverless stack.
 
-> Status: **Phase 1** (Asset CRUD API) and **Phase 2** (Task API + Kanban frontend) implemented. Timeline, S3 upload/download and the Assets UI are later phases (see `plan.md`).
+> Status: **Phase 1** (Asset CRUD API), **Phase 2** (Task API + Kanban) and **Phase 3** (Timeline API + Gantt chart) implemented. S3 upload/download and the Assets UI are Phase 4 (see `plan.md`).
 
 ## Architecture
 
@@ -39,7 +39,7 @@ Also in Learner Lab: IAM roles cannot be created, so `LabRole` is used. Least-pr
 ```
 backend/asset-handler/   handler.py (routing) · database.py (DynamoDB) · storage.py (S3) · validation.py
 backend/task-handler/    handler.py · database.py · validation.py
-frontend/                React + TypeScript + Vite + Tailwind (Tasks Kanban board)
+frontend/                React + TypeScript + Vite + Tailwind (Tasks Kanban board, Timeline Gantt chart)
 scripts/deploy.py        idempotent provisioning + deploy (boto3)
 tests/                   pytest + moto unit tests
 docs/                    design brief, database design, API docs, evidence/
@@ -68,6 +68,8 @@ cd frontend
 cp .env.example .env.local   # fill in assetApiUrl / taskApiUrl from .aws/outputs.json
 npm install && npm run dev
 ```
+Timeline: simplified Gantt chart (bar position = start date, length = duration, colour = status: gray/blue/orange/green), range navigation (prev/next/today, 2 weeks to 3 months), status and category filters, red/amber highlighting for overdue and due-within-3-days tasks, and completion statistics. It calls `GET /timeline` for the visible window, so edits made on the Tasks page show up on the next load.
+
 Kanban supports drag-and-drop between columns (optimistic update with rollback), create/edit/delete, and search/status/priority/category/assignee filters (applied client-side over the fetched list).
 
 Credentials expire with each lab session; rerun step 1 and the script is safe to run again.

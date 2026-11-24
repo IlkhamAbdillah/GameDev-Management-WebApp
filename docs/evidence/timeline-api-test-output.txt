@@ -1,0 +1,16 @@
+### GET /timeline
+{"success": true, "data": {"tasks": [{"taskId": "de1fd0ce-156d-459b-a53e-9ea580165111", "title": "Player controller", "assignee": "Rina", "category": "Programming", "priority": "Medium", "status": "Done", "startDate": "2026-11-16", "dueDate": "2026-11-23", "start": "2026-11-16", "end": "2026-11-23"}, {"taskId": "f0da9fae-69e8-4304-8262-26a2e36ab0f4", "title": "Playtest round 1", "assignee": "", "category": "Testing", "priority": "Critical", "status": "To Do", "startDate": "", "dueDate": "2026-11-20", "start": "2026-11-20", "end": "2026-11-20"}, {"taskId": "c5b56258-618a-40aa-8d4e-95aebecbfb59", "title": "Enemy AI", "assignee": "Rina", "category": "Programming", "priority": "High", "status": "In Progress", "startDate": "2026-11-22", "dueDate": "2026-11-27", "start": "2026-11-22", "end": "2026-11-27"}, {"taskId": "358324ef-4ed8-4fed-8b6c-3d245898dc2e", "title": "Level 1 environment", "assignee": "Dimas", "category": "Art", "priority": "Medium", "status": "In Review", "startDate": "2026-11-25", "dueDate": "2026-12-10", "start": "2026-11-25", "end": "2026-12-10"}, {"taskId": "9217328c-13da-44ac-915d-3b7f6e08c758", "title": "Boss concept art", "assignee": "Dimas", "category": "Art", "priority": "Medium", "status": "To Do", "startDate": "", "dueDate": "2026-12-01", "start": "2026-12-01", "end": "2026-12-01"}, {"taskId": "1bf684e2-6175-4113-810f-128757b9eae8", "title": "Main theme", "assignee": "Sari", "category": "Audio", "priority": "Medium", "status": "To Do", "startDate": "2026-12-01", "dueDate": "2026-12-20", "start": "2026-12-01", "end": "2026-12-20"}], "stats": {"total": 6, "done": 1, "completionRate": 17, "byStatus": {"To Do": 3, "In Progress": 1, "In Review": 1, "Done": 1}, "overdue": 1, "dueSoon": 1, "unscheduled": 0}}}
+HTTP 200
+
+### GET /timeline?startDate=2026-12-05&endDate=2026-12-31
+{"success": true, "data": {"tasks": [{"taskId": "358324ef-4ed8-4fed-8b6c-3d245898dc2e", "title": "Level 1 environment", "assignee": "Dimas", "category": "Art", "priority": "Medium", "status": "In Review", "startDate": "2026-11-25", "dueDate": "2026-12-10", "start": "2026-11-25", "end": "2026-12-10"}, {"taskId": "1bf684e2-6175-4113-810f-128757b9eae8", "title": "Main theme", "assignee": "Sari", "category": "Audio", "priority": "Medium", "status": "To Do", "startDate": "2026-12-01", "dueDate": "2026-12-20", "start": "2026-12-01", "end": "2026-12-20"}], "stats": {"total": 6, "done": 1, "completionRate": 17, "byStatus": {"To Do": 3, "In Progress": 1, "In Review": 1, "Done": 1}, "overdue": 1, "dueSoon": 1, "unscheduled": 0}}}
+HTTP 200
+
+### GET /timeline?status=In%20Progress&category=Programming
+{"success": true, "data": {"tasks": [{"taskId": "c5b56258-618a-40aa-8d4e-95aebecbfb59", "title": "Enemy AI", "assignee": "Rina", "category": "Programming", "priority": "High", "status": "In Progress", "startDate": "2026-11-22", "dueDate": "2026-11-27", "start": "2026-11-22", "end": "2026-11-27"}], "stats": {"total": 1, "done": 0, "completionRate": 0, "byStatus": {"To Do": 0, "In Progress": 1, "In Review": 0, "Done": 0}, "overdue": 0, "dueSoon": 1, "unscheduled": 0}}}
+HTTP 200
+
+### GET /timeline invalid range
+{"success": false, "message": "endDate must not be before startDate"}
+HTTP 400
+

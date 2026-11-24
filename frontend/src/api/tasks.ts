@@ -1,4 +1,4 @@
-import type { Task, TaskInput } from '../types'
+import type { Task, TaskInput, Timeline, TimelineQuery } from '../types'
 import { request } from './client'
 
 const BASE = import.meta.env.VITE_TASK_API_URL as string | undefined
@@ -11,4 +11,13 @@ export const tasksApi = {
     request<Task>(BASE, `/tasks/${encodeURIComponent(taskId)}`, { method: 'PUT', body: json(input) }),
   remove: (taskId: string) =>
     request<void>(BASE, `/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }),
+}
+
+export const timelineApi = {
+  get: (query: TimelineQuery) => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query)) if (value) params.set(key, value)
+    const qs = params.toString()
+    return request<Timeline>(BASE, `/timeline${qs ? `?${qs}` : ''}`)
+  },
 }
