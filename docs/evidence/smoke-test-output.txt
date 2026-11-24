@@ -1,0 +1,65 @@
+== Connectivity (API Gateway-equivalent entry, Lambda, DynamoDB, S3)
+PASS  asset API /health -> Lambda + DynamoDB (assets, folders) + S3
+PASS  task API /health -> Lambda + DynamoDB (tasks)
+== Folders
+PASS  create folder -> 201
+PASS  create nested folder
+PASS  duplicate sibling name -> 400
+PASS  move folder into its own child -> 400
+== Assets
+PASS  create asset -> 201
+PASS  asset starts as Planned with no file
+PASS  create invalid asset -> 400
+PASS  list assets contains it
+PASS  filter by folder
+PASS  search by name
+PASS  get asset details
+PASS  update asset
+PASS  unknown asset -> 404
+== S3 pre-signed upload / download
+PASS  disallowed file type -> 400
+PASS  oversized file -> 400
+PASS  upload URL is scoped to the asset
+PASS  PUT file to S3 through the pre-signed URL -> 200
+PASS  S3 rejects an upload that differs from the signed size -> 403
+PASS  stored S3 object key is saved on the asset
+PASS  .glb is previewable as a 3D model
+PASS  download returns identical bytes
+PASS  cannot attach another asset's key
+PASS  object really exists in the private bucket
+PASS  bucket blocks all public access
+PASS  unsigned (anonymous) GET of the object is denied -> 403
+PASS  delete file -> 204
+PASS  delete file again -> 404
+PASS  non-empty folder cannot be deleted -> 400
+PASS  delete asset -> 204
+PASS  deleted asset -> 404
+== Tasks
+PASS  create task -> 201
+PASS  tasks and assets are independent (no assetId on a task)
+PASS  invalid task -> 400
+PASS  due before start -> 400
+PASS  get task details
+PASS  filter tasks by assignee
+PASS  filter by category + priority
+PASS  change task status
+PASS  partial date update is checked against stored dates -> 400
+PASS  unknown task -> 404
+== Timeline (derived from tasks, no separate table)
+PASS  timeline returns the task with start/due dates, status and assignee
+PASS  date range filter excludes tasks outside the window
+PASS  window across both tasks
+PASS  timeline status filter
+PASS  timeline stats present
+PASS  timeline reflects status/date edits immediately
+PASS  invalid timeline range -> 400
+== CORS
+PASS  asset API CORS preflight
+PASS  task API CORS preflight
+== Cleanup
+PASS  all smoke data removed
+== CloudWatch
+PASS  /aws/lambda/GameVaultAssetHandler has fresh execution logs
+PASS  /aws/lambda/GameVaultTaskHandler has fresh execution logs
+
+54/54 checks passed in 57.1s

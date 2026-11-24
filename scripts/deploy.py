@@ -3,11 +3,13 @@
 
 Usage:  AWS_SHARED_CREDENTIALS_FILE=.aws/credentials AWS_CONFIG_FILE=.aws/config \
         .venv/bin/python scripts/deploy.py
+        AWS_PROFILE=awsstudent ... scripts/deploy.py --tables-only   # only if the default role cannot CreateTable
 
 Requires Learner Lab session credentials (role voclabs): LabRole is passed to Lambda.
 """
 import io
 import json
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -166,6 +168,8 @@ def ensure_function_url(name):
 if __name__ == "__main__":
     print(f"account {account} region {REGION}")
     ensure_tables()
+    if "--tables-only" in sys.argv:  # for a profile that may create tables but cannot pass roles (awsstudent)
+        sys.exit(0)
     ensure_bucket()
     urls = {}
     for key, spec in FUNCTIONS.items():

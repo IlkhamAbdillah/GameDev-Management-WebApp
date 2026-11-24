@@ -1,5 +1,7 @@
 import { Activity, BookOpen, Boxes, CalendarRange, KanbanSquare, Vault } from 'lucide-react'
+import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { refreshStatuses } from '../lib/connectivityStore'
 
 const NAV = [
   { to: '/assets', label: 'Assets', icon: Boxes },
@@ -13,6 +15,11 @@ const SYSTEM_NAV = [
 ]
 
 export default function Layout() {
+  // Quiet health check when the app loads, so the Connectivity page already has its statuses.
+  useEffect(() => {
+    void refreshStatuses()
+  }, [])
+
   return (
     <div className="flex h-full flex-col md:flex-row">
       <aside className="flex shrink-0 items-center gap-4 border-b border-line bg-surface px-4 py-3 md:w-60 md:flex-col md:items-stretch md:gap-6 md:border-r md:border-b-0 md:p-4">

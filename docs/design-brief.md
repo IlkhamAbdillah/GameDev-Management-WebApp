@@ -22,7 +22,7 @@ Client → Lambda Function URL → Lambda (Python 3.12) → DynamoDB / S3, with 
 Private S3 bucket (Block Public Access, SSE-S3); no credentials in code or frontend (`.aws/` git-ignored); payload validation with whitelisted fields; conditional writes; generic 500 errors with details only in CloudWatch. **Known limitation:** no authentication and public Function URL; CORS `*` — acceptable for the academic MVP only.
 
 ## Implemented scope (final)
-Assets (nested folders, S3 upload/download, preview of images, audio and `.glb` models), Tasks (Kanban with drag-and-drop), Timeline (Gantt chart derived from tasks, deadline highlighting, completion statistics). Three DynamoDB tables: `GameVaultAssets`, `GameVaultTasks` and `GameVaultFolders` (folders were added by request; Assets and Tasks remain independent and Timeline has no table). Verified by 105 backend tests, 33 frontend tests and a 54-check live smoke test (`docs/testing.md`).
+Assets (nested folders, S3 upload/download, preview of images, audio and `.glb` models), Tasks (Kanban with drag-and-drop), Timeline (Gantt chart derived from tasks, deadline highlighting, completion statistics). Three DynamoDB tables: `GameVaultAssets`, `GameVaultTasks` and `GameVaultFolders` (folders were added by request; Assets and Tasks remain independent and Timeline has no table). Verified by 105 backend tests, 68 frontend tests and a 54-check live smoke test (`docs/testing.md`).
 
 ## Roadmap
 Completed: Phases 1–5. Next: authentication (e.g. Cognito), API Gateway instead of Function URLs where permitted, per-function least-privilege IAM roles, DynamoDB GSIs/queries instead of `Scan`, server-stored model thumbnails, hosting the frontend.

@@ -19,6 +19,7 @@ vi.mock('../api/tasks', () => ({
 }))
 
 import { runRoundTrip, type StepResult } from './connectivityTest'
+import type { FlowHooks, NodeId, NodeStatus } from './flowModel'
 
 const PROBE = 'gamevault-connectivity-probe'
 
@@ -85,5 +86,38 @@ describe('runRoundTrip', () => {
     assets.remove.mockRejectedValue(new Error('still boom'))
     const { cleanupWarning } = await run()
     expect(cleanupWarning).toMatch(/Could not delete the temporary asset "connectivity-probe-/)
+  })
+
+  describe('with diagram hooks', () => {
+    function recorder() {
+      const hops: string[] = []
+      const nodes: Partial<Record<NodeId, NodeStatus>> = {}
+      const hooks: FlowHooks = {
+        hop: async (from, to, o) => void hops.push(`${from}>${to}${o?.tone ? `:${o.tone}` : ''}`),
+        log: () => {},
+        setNode: (id, status) => void (nodes[id] = status),
+      }
+      return { hops, nodes, hooks }
+    }
+
+    it('animates each step out along its route and back along the same route in reverse', async () => {
+      const r = recorder()
+      await runRoundTrip(() => {}, r.hooks)
+      // first step: create asset -> browser, URL, Lambda, table, then the answer retraces it
+      expect(r.hops.slice(0, 6)).toEqual(['client>assetUrl', 'assetUrl>assetLambda', 'assetLambda>assetsTable', 'assetsTable>assetLambda:ok', 'assetLambda>assetUrl:ok', 'assetUrl>client:ok'])
+      expect(r.hops).toContain('client>s3') // the direct browser -> S3 upload bypasses Lambda
+      expect(r.hops).toContain('s3>client:ok')
+      expect(r.nodes.s3?.state).toBe('ok')
+      expect(r.nodes.tasksTable?.state).toBe('ok')
+    })
+
+    it('shows the failing node in red and returns a failed packet', async () => {
+      assets.putToS3.mockRejectedValue(new Error('Upload to storage failed (403)'))
+      const r = recorder()
+      await runRoundTrip(() => {}, r.hooks)
+      expect(r.nodes.s3).toMatchObject({ state: 'failed', error: expect.stringContaining('403') })
+      expect(r.hops).toContain('s3>client:fail')
+      expect(r.hops.some((h) => h.includes('taskUrl'))).toBe(false) // later steps are skipped
+    })
   })
 })

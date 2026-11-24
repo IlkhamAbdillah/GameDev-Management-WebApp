@@ -1,17 +1,15 @@
 DynamoDB: GameVaultAssets [{'AttributeName': 'assetId', 'KeyType': 'HASH'}] PAY_PER_REQUEST ACTIVE
-Lambda: GameVaultAssetHandler python3.12 handler.lambda_handler LabRole {'ASSETS_TABLE': 'GameVaultAssets', 'ASSET_BUCKET': 'gamevault-assets-792897905750'}
+DynamoDB: GameVaultFolders [{'AttributeName': 'folderId', 'KeyType': 'HASH'}] PAY_PER_REQUEST ACTIVE
+DynamoDB: GameVaultTasks [{'AttributeName': 'taskId', 'KeyType': 'HASH'}] PAY_PER_REQUEST ACTIVE
+Lambda: GameVaultAssetHandler python3.12 handler.lambda_handler LabRole {'ASSETS_TABLE': 'GameVaultAssets', 'ASSET_BUCKET': 'gamevault-assets-173467705237', 'FOLDERS_TABLE': 'GameVaultFolders'}
+  Function URL auth: NONE CORS origins: ['*']
+Lambda: GameVaultTaskHandler python3.12 handler.lambda_handler LabRole {'TASKS_TABLE': 'GameVaultTasks'}
+  Function URL auth: NONE CORS origins: ['*']
 S3 public access block: {'BlockPublicAcls': True, 'IgnorePublicAcls': True, 'BlockPublicPolicy': True, 'RestrictPublicBuckets': True}
 S3 encryption: {'SSEAlgorithm': 'AES256'}
 CloudWatch group: /aws/lambda/GameVaultAssetHandler
-   START RequestId: cb4959e3-a077-4101-965e-8c5e24aeb215 Version: $LATEST
-   END RequestId: cb4959e3-a077-4101-965e-8c5e24aeb215
-   REPORT RequestId: cb4959e3-a077-4101-965e-8c5e24aeb215	Duration: 9.27 ms	Billed Duration: 10 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
-   START RequestId: d7f5e7c8-c038-4afe-8731-36608e22359f Version: $LATEST
-   END RequestId: d7f5e7c8-c038-4afe-8731-36608e22359f
-   REPORT RequestId: d7f5e7c8-c038-4afe-8731-36608e22359f	Duration: 1.99 ms	Billed Duration: 2 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
-   START RequestId: 798078e5-4c68-43e6-afd9-fe4ad1b3622d Version: $LATEST
-   END RequestId: 798078e5-4c68-43e6-afd9-fe4ad1b3622d
-   REPORT RequestId: 798078e5-4c68-43e6-afd9-fe4ad1b3622d	Duration: 13.55 ms	Billed Duration: 14 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
-   START RequestId: 800e4d28-418c-4f37-8dfc-6fa31fb832eb Version: $LATEST
-   END RequestId: 800e4d28-418c-4f37-8dfc-6fa31fb832eb
-   REPORT RequestId: 800e4d28-418c-4f37-8dfc-6fa31fb832eb	Duration: 8.25 ms	Billed Duration: 9 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
+   REPORT RequestId: b551d9e1-4ce5-4c87-b5fd-430af132b95f	Duration: 61.15 ms	Billed Duration: 62 ms	Memory Size: 256 MB	Max Memory Used: 99 MB
+   REPORT RequestId: 796932cc-fde0-41f1-9d32-69807b87a1a5	Duration: 8.19 ms	Billed Duration: 9 ms	Memory Size: 256 MB	Max Memory Used: 99 MB
+CloudWatch group: /aws/lambda/GameVaultTaskHandler
+   REPORT RequestId: 38b53251-a0a5-4dfe-9d53-60a2ee3ead03	Duration: 17.83 ms	Billed Duration: 18 ms	Memory Size: 256 MB	Max Memory Used: 90 MB
+   REPORT RequestId: de975925-0457-495d-8285-15f2a3483590	Duration: 8.85 ms	Billed Duration: 9 ms	Memory Size: 256 MB	Max Memory Used: 90 MB

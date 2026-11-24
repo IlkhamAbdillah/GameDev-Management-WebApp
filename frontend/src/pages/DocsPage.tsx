@@ -191,7 +191,7 @@ export default function DocsPage() {
 
           <Section id="testing" title="Testing">
             <p className="text-sm text-slate-300">
-              Backend logic is covered by pytest against mocked AWS, the UI helpers by Vitest, and the deployed stack by a live smoke test that exercises real DynamoDB, S3 and CloudWatch. You can run a similar end-to-end check yourself on the <Link to="/connectivity" className="text-accent underline">Connectivity</Link> page.
+              Backend logic is covered by pytest against mocked AWS, the UI helpers by Vitest, and the deployed stack by a live smoke test that exercises real DynamoDB, S3 and CloudWatch. Open the <Link to="/connectivity" className="text-accent underline">Connectivity</Link> page for an interactive version of the architecture diagram: click a component for details, run a test to watch a request travel through it, or run a full round-trip test.
             </p>
           </Section>
         </article>
