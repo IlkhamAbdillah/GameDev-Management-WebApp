@@ -1,0 +1,17 @@
+DynamoDB: GameVaultAssets [{'AttributeName': 'assetId', 'KeyType': 'HASH'}] PAY_PER_REQUEST ACTIVE
+Lambda: GameVaultAssetHandler python3.12 handler.lambda_handler LabRole {'ASSETS_TABLE': 'GameVaultAssets', 'ASSET_BUCKET': 'gamevault-assets-792897905750'}
+S3 public access block: {'BlockPublicAcls': True, 'IgnorePublicAcls': True, 'BlockPublicPolicy': True, 'RestrictPublicBuckets': True}
+S3 encryption: {'SSEAlgorithm': 'AES256'}
+CloudWatch group: /aws/lambda/GameVaultAssetHandler
+   START RequestId: cb4959e3-a077-4101-965e-8c5e24aeb215 Version: $LATEST
+   END RequestId: cb4959e3-a077-4101-965e-8c5e24aeb215
+   REPORT RequestId: cb4959e3-a077-4101-965e-8c5e24aeb215	Duration: 9.27 ms	Billed Duration: 10 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
+   START RequestId: d7f5e7c8-c038-4afe-8731-36608e22359f Version: $LATEST
+   END RequestId: d7f5e7c8-c038-4afe-8731-36608e22359f
+   REPORT RequestId: d7f5e7c8-c038-4afe-8731-36608e22359f	Duration: 1.99 ms	Billed Duration: 2 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
+   START RequestId: 798078e5-4c68-43e6-afd9-fe4ad1b3622d Version: $LATEST
+   END RequestId: 798078e5-4c68-43e6-afd9-fe4ad1b3622d
+   REPORT RequestId: 798078e5-4c68-43e6-afd9-fe4ad1b3622d	Duration: 13.55 ms	Billed Duration: 14 ms	Memory Size: 256 MB	Max Memory Used: 96 MB
+   START RequestId: 800e4d28-418c-4f37-8dfc-6fa31fb832eb Version: $LATEST
+   END RequestId: 800e4d28-418c-4f37-8dfc-6fa31fb832eb
+   REPORT RequestId: 800e4d28-418c-4f37-8dfc-6fa31fb832eb	Duration: 8.25 ms	Billed Duration: 9 ms	Memory Size: 256 MB	Max Memory Used: 96 MB

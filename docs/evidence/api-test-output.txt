@@ -1,0 +1,32 @@
+### GET /health
+{"success": true, "data": {"status": "ok", "dynamodb": "ok", "s3": "ok"}}
+HTTP 200
+
+### POST /assets
+{"success": true, "data": {"assetId": "e38ca4c2-4ac6-45d7-88e3-6f8ec050d8a2", "assetName": "Main Character", "assetType": "Character", "description": "Hero model", "assignedTo": "Rina", "status": "Planned", "s3Key": "", "createdAt": "2026-11-24T01:29:48.260416Z", "updatedAt": "2026-11-24T01:29:48.260416Z"}}
+HTTP 201
+
+### GET /assets
+{"success": true, "data": [{"assetId": "e38ca4c2-4ac6-45d7-88e3-6f8ec050d8a2", "updatedAt": "2026-11-24T01:29:48.260416Z", "assignedTo": "Rina", "assetType": "Character", "assetName": "Main Character", "status": "Planned", "createdAt": "2026-11-24T01:29:48.260416Z", "description": "Hero model", "s3Key": ""}]}
+HTTP 200
+
+### GET /assets/{id}
+{"success": true, "data": {"assetId": "e38ca4c2-4ac6-45d7-88e3-6f8ec050d8a2", "updatedAt": "2026-11-24T01:29:48.260416Z", "assignedTo": "Rina", "assetType": "Character", "assetName": "Main Character", "status": "Planned", "createdAt": "2026-11-24T01:29:48.260416Z", "description": "Hero model", "s3Key": ""}}
+HTTP 200
+
+### PUT /assets/{id}
+{"success": true, "data": {"createdAt": "2026-11-24T01:29:48.260416Z", "description": "Hero model", "assetType": "Character", "assignedTo": "Rina", "assetName": "Main Character", "status": "In Progress", "s3Key": "", "assetId": "e38ca4c2-4ac6-45d7-88e3-6f8ec050d8a2", "updatedAt": "2026-11-24T01:29:51.726475Z"}}
+HTTP 200
+
+### POST invalid
+{"success": false, "message": "assetType is required"}
+HTTP 400
+
+### DELETE /assets/{id}
+
+HTTP 204
+
+### GET deleted
+{"success": false, "message": "Asset not found"}
+HTTP 404
+

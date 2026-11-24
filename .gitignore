@@ -1,0 +1,19 @@
+# secrets & lab artifacts
+.aws/
+*.pem
+*.ppk
+.env
+.env.*
+# python
+.venv/
+__pycache__/
+.pytest_cache/
+*.zip
+build/
+# node
+node_modules/
+dist/
+# agents
+prompt.md
+CLAUDE.md
+plan.md
