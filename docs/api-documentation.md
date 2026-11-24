@@ -1,6 +1,6 @@
 # API Documentation (Phase 1)
 
-Base URL: Lambda Function URL from `.aws/outputs.json` (`apiUrl`). All bodies are JSON.
+Base URLs: one Lambda Function URL per module, from `.aws/outputs.json` (`assetApiUrl` for `/assets`, `taskApiUrl` for `/tasks`). All bodies are JSON.
 
 Success: `{"success": true, "data": ...}` · Error: `{"success": false, "message": "..."}`
 
@@ -34,5 +34,27 @@ curl -X POST $URL/assets -H 'content-type: application/json' \
 ```
 Real captured output: `docs/evidence/api-test-output.txt`.
 
+## Tasks API (Phase 2) — `taskApiUrl`
+| Method | Path | Description | Success |
+|---|---|---|---|
+| GET | `/health` | DynamoDB connectivity | 200 |
+| POST | `/tasks` | Create task | 201 |
+| GET | `/tasks` | List tasks. Optional query: `search` (title contains), `status`, `priority`, `category`, `assignee`. Sorted by `dueDate` (undated last) | 200 |
+| GET | `/tasks/{taskId}` | Task details | 200 |
+| PUT | `/tasks/{taskId}` | Partial update (also used to change status) | 200 |
+| DELETE | `/tasks/{taskId}` | Delete task | 204 |
+
+| Field | Rules |
+|---|---|
+| `title` | required on create, ≤120 chars |
+| `category` | Programming, Art, Design, Audio, Testing, Documentation, Other (default Other) |
+| `priority` | Low, Medium (default), High, Critical |
+| `status` | To Do (default), In Progress, In Review, Done |
+| `assignee` | ≤100 chars |
+| `description` | ≤2000 chars |
+| `startDate`, `dueDate` | optional, valid `YYYY-MM-DD` (or empty); `dueDate` must not be before `startDate` (also checked against the stored value on partial updates) |
+
+Tasks never reference assets.
+
 ## Planned (later phases)
-`POST /assets/{id}/upload-url`, `DELETE /assets/{id}/file` (Phase 4); `/tasks` CRUD (Phase 2); `GET /timeline` (Phase 3).
+`POST /assets/{id}/upload-url`, `DELETE /assets/{id}/file` (Phase 4); `GET /timeline` (Phase 3, served by the Task Lambda).

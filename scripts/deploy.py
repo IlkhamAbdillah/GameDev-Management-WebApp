@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotent Phase 1 deploy: DynamoDB table, private S3 bucket, Asset Lambda + Function URL.
+"""Idempotent deploy: DynamoDB tables, private S3 bucket, Asset + Task Lambdas with Function URLs.
 
 Usage:  AWS_SHARED_CREDENTIALS_FILE=.aws/credentials AWS_CONFIG_FILE=.aws/config \
         .venv/bin/python scripts/deploy.py
@@ -17,35 +17,49 @@ from botocore.exceptions import ClientError
 
 REGION = "us-east-1"
 ROOT = Path(__file__).resolve().parents[1]
-HANDLER_DIR = ROOT / "backend" / "asset-handler"
-TABLE = "GameVaultAssets"
-FUNCTION = "GameVaultAssetHandler"
+TABLES = {"GameVaultAssets": "assetId", "GameVaultTasks": "taskId"}
 ROLE_NAME = "LabRole"  # Learner Lab: IAM role creation is not available
 OUTPUT = ROOT / ".aws" / "outputs.json"
 
 session = boto3.Session(region_name=REGION)
 account = session.client("sts").get_caller_identity()["Account"]
 BUCKET = f"gamevault-assets-{account}"
+FUNCTIONS = {
+    "asset": {
+        "name": "GameVaultAssetHandler",
+        "dir": ROOT / "backend" / "asset-handler",
+        "env": {"ASSETS_TABLE": "GameVaultAssets", "ASSET_BUCKET": BUCKET},
+    },
+    "task": {
+        "name": "GameVaultTaskHandler",
+        "dir": ROOT / "backend" / "task-handler",
+        "env": {"TASKS_TABLE": "GameVaultTasks"},
+    },
+}
 ddb, s3, lam, iam = (session.client(n) for n in ("dynamodb", "s3", "lambda", "iam"))
 
 
-def ensure_table():
-    if TABLE in ddb.list_tables()["TableNames"]:
-        print(f"table {TABLE} exists")
-        return
-    try:
-        ddb.create_table(
-            TableName=TABLE,
-            KeySchema=[{"AttributeName": "assetId", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "assetId", "AttributeType": "S"}],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        print(f"created table {TABLE}")
-    except ClientError as err:
-        if err.response["Error"]["Code"] != "ResourceInUseException":
-            raise
-        print(f"table {TABLE} exists")
-    ddb.get_waiter("table_exists").wait(TableName=TABLE)
+def ensure_tables():
+    existing = set(ddb.list_tables()["TableNames"])
+    for table, key in TABLES.items():
+        if table in existing:
+            print(f"table {table} exists")
+            continue
+        try:
+            ddb.create_table(
+                TableName=table,
+                KeySchema=[{"AttributeName": key, "KeyType": "HASH"}],
+                AttributeDefinitions=[{"AttributeName": key, "AttributeType": "S"}],
+                BillingMode="PAY_PER_REQUEST",
+            )
+        except ClientError as err:
+            if err.response["Error"]["Code"] != "AccessDeniedException":
+                raise
+            print(f"WARNING: not allowed to create {table} with these credentials. Create it in the "
+                  f"console (partition key {key}, String, on-demand) and rerun.")
+            continue
+        ddb.get_waiter("table_exists").wait(TableName=table)
+        print(f"created table {table}")
 
 
 def ensure_bucket():
@@ -87,28 +101,29 @@ def ensure_bucket():
     )
 
 
-def build_zip():
+def build_zip(handler_dir):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(HANDLER_DIR.glob("*.py")):
+        for path in sorted(handler_dir.glob("*.py")):
             archive.write(path, path.name)
     return buffer.getvalue()
 
 
-def ensure_function():
+def ensure_function(spec):
+    name = spec["name"]
     role_arn = iam.get_role(RoleName=ROLE_NAME)["Role"]["Arn"]
-    code = build_zip()
-    env = {"Variables": {"ASSETS_TABLE": TABLE, "ASSET_BUCKET": BUCKET}}
+    code = build_zip(spec["dir"])
+    env = {"Variables": spec["env"]}
     try:
-        lam.get_function(FunctionName=FUNCTION)
-        lam.update_function_code(FunctionName=FUNCTION, ZipFile=code)
-        lam.get_waiter("function_updated").wait(FunctionName=FUNCTION)
-        lam.update_function_configuration(FunctionName=FUNCTION, Environment=env, Timeout=15)
-        lam.get_waiter("function_updated").wait(FunctionName=FUNCTION)
-        print(f"updated function {FUNCTION}")
+        lam.get_function(FunctionName=name)
+        lam.update_function_code(FunctionName=name, ZipFile=code)
+        lam.get_waiter("function_updated").wait(FunctionName=name)
+        lam.update_function_configuration(FunctionName=name, Environment=env, Timeout=15)
+        lam.get_waiter("function_updated").wait(FunctionName=name)
+        print(f"updated function {name}")
     except lam.exceptions.ResourceNotFoundException:
         lam.create_function(
-            FunctionName=FUNCTION,
+            FunctionName=name,
             Runtime="python3.12",
             Role=role_arn,
             Handler="handler.lambda_handler",
@@ -117,11 +132,11 @@ def ensure_function():
             Timeout=15,
             MemorySize=256,
         )
-        lam.get_waiter("function_active_v2").wait(FunctionName=FUNCTION)
-        print(f"created function {FUNCTION}")
+        lam.get_waiter("function_active_v2").wait(FunctionName=name)
+        print(f"created function {name}")
 
 
-def ensure_function_url():
+def ensure_function_url(name):
     """Public Lambda Function URL (payload format 2.0). Used because apigateway:POST is denied."""
     cors = {
         "AllowOrigins": ["*"],
@@ -130,9 +145,9 @@ def ensure_function_url():
         "MaxAge": 3600,
     }
     try:
-        url = lam.create_function_url_config(FunctionName=FUNCTION, AuthType="NONE", Cors=cors)["FunctionUrl"]
+        url = lam.create_function_url_config(FunctionName=name, AuthType="NONE", Cors=cors)["FunctionUrl"]
     except lam.exceptions.ResourceConflictException:
-        url = lam.update_function_url_config(FunctionName=FUNCTION, AuthType="NONE", Cors=cors)["FunctionUrl"]
+        url = lam.update_function_url_config(FunctionName=name, AuthType="NONE", Cors=cors)["FunctionUrl"]
     statements = [
         dict(StatementId="FunctionURLAllowPublicAccess", Action="lambda:InvokeFunctionUrl",
              FunctionUrlAuthType="NONE"),
@@ -141,20 +156,23 @@ def ensure_function_url():
     ]
     for stmt in statements:
         try:
-            lam.add_permission(FunctionName=FUNCTION, Principal="*", **stmt)
+            lam.add_permission(FunctionName=name, Principal="*", **stmt)
         except lam.exceptions.ResourceConflictException:
             pass
-    print(f"function url: {url}")
-    return url
+    print(f"function url ({name}): {url}")
+    return url.rstrip("/")
 
 
 if __name__ == "__main__":
     print(f"account {account} region {REGION}")
-    ensure_table()
+    ensure_tables()
     ensure_bucket()
-    ensure_function()
+    urls = {}
+    for key, spec in FUNCTIONS.items():
+        ensure_function(spec)
     time.sleep(2)
-    url = ensure_function_url()
+    for key, spec in FUNCTIONS.items():
+        urls[f"{key}ApiUrl"] = ensure_function_url(spec["name"])
     OUTPUT.parent.mkdir(exist_ok=True)
-    OUTPUT.write_text(json.dumps({"apiUrl": url.rstrip("/"), "bucket": BUCKET, "table": TABLE}, indent=2))
+    OUTPUT.write_text(json.dumps({**urls, "bucket": BUCKET, "tables": list(TABLES)}, indent=2))
     print(f"wrote {OUTPUT.relative_to(ROOT)}")

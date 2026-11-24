@@ -1,0 +1,40 @@
+### GET /health
+{"success": true, "data": {"status": "ok", "dynamodb": "ok"}}
+HTTP 200
+
+### POST /tasks
+{"success": true, "data": {"taskId": "511afacd-f928-44b8-8a64-8fc302af466f", "title": "Build player controller", "assignee": "Rina", "category": "Programming", "priority": "High", "startDate": "2026-11-25", "dueDate": "2026-12-05", "description": "", "status": "To Do", "createdAt": "2026-11-24T01:57:44.981839Z", "updatedAt": "2026-11-24T01:57:44.981839Z"}}
+HTTP 201
+
+### GET /tasks (sorted by dueDate)
+{"success": true, "data": [{"taskId": "9217328c-13da-44ac-915d-3b7f6e08c758", "updatedAt": "2026-11-24T01:57:45.839184Z", "status": "To Do", "dueDate": "2026-12-01", "category": "Art", "assignee": "Dimas", "startDate": "", "createdAt": "2026-11-24T01:57:45.839184Z", "priority": "Medium", "description": "", "title": "Boss concept art"}, {"taskId": "511afacd-f928-44b8-8a64-8fc302af466f", "updatedAt": "2026-11-24T01:57:44.981839Z", "status": "To Do", "dueDate": "2026-12-05", "assignee": "Rina", "category": "Programming", "startDate": "2026-11-25", "priority": "High", "createdAt": "2026-11-24T01:57:44.981839Z", "description": "", "title": "Build player controller"}]}
+HTTP 200
+
+### GET /tasks?category=Art&assignee=Dimas
+{"success": true, "data": [{"taskId": "9217328c-13da-44ac-915d-3b7f6e08c758", "updatedAt": "2026-11-24T01:57:45.839184Z", "status": "To Do", "dueDate": "2026-12-01", "category": "Art", "assignee": "Dimas", "startDate": "", "createdAt": "2026-11-24T01:57:45.839184Z", "priority": "Medium", "description": "", "title": "Boss concept art"}]}
+HTTP 200
+
+### GET /tasks/{id}
+{"success": true, "data": {"taskId": "511afacd-f928-44b8-8a64-8fc302af466f", "updatedAt": "2026-11-24T01:57:44.981839Z", "status": "To Do", "dueDate": "2026-12-05", "assignee": "Rina", "category": "Programming", "startDate": "2026-11-25", "priority": "High", "createdAt": "2026-11-24T01:57:44.981839Z", "description": "", "title": "Build player controller"}}
+HTTP 200
+
+### PUT change status
+{"success": true, "data": {"createdAt": "2026-11-24T01:57:44.981839Z", "taskId": "511afacd-f928-44b8-8a64-8fc302af466f", "description": "", "dueDate": "2026-12-05", "assignee": "Rina", "title": "Build player controller", "priority": "High", "updatedAt": "2026-11-24T01:57:50.087056Z", "status": "In Progress", "startDate": "2026-11-25", "category": "Programming"}}
+HTTP 200
+
+### PUT invalid date order
+{"success": false, "message": "dueDate must not be before startDate"}
+HTTP 400
+
+### POST invalid
+{"success": false, "message": "priority must be one of: Low, Medium, High, Critical"}
+HTTP 400
+
+### DELETE /tasks/{id}
+
+HTTP 204
+
+### GET deleted
+{"success": false, "message": "Task not found"}
+HTTP 404
+

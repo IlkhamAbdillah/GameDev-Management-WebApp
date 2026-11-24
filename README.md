@@ -4,15 +4,17 @@
 
 Lightweight game-development workspace for small indie teams: asset library (Assets), Kanban task board (Tasks) and Gantt-style schedule (Timeline). Built on an AWS serverless stack.
 
-> Status: **Phase 1 (Week 12 MVP)** — Asset CRUD API deployed. Tasks, Timeline, upload/download and frontend are in later phases (see `plan.md`).
+> Status: **Phase 1** (Asset CRUD API) and **Phase 2** (Task API + Kanban frontend) implemented. Timeline, S3 upload/download and the Assets UI are later phases (see `plan.md`).
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  C[Client / Postman / curl] -->|HTTPS JSON| U[Lambda Function URL]
+  C[Client / Postman / curl] -->|HTTPS JSON| U[Lambda Function URLs]
   subgraph AWS us-east-1
     U --> L[Lambda: GameVaultAssetHandler<br/>Python 3.12]
+    U --> T[Lambda: GameVaultTaskHandler<br/>Python 3.12]
+    T -->|CRUD| D2[(DynamoDB<br/>GameVaultTasks)]
     L -->|CRUD| D[(DynamoDB<br/>GameVaultAssets)]
     L -->|head_bucket / pre-signed URLs - Phase 4| S[(S3 private bucket<br/>gamevault-assets-ACCOUNT)]
     L -.logs.-> CW[CloudWatch Logs]
@@ -36,6 +38,8 @@ Also in Learner Lab: IAM roles cannot be created, so `LabRole` is used. Least-pr
 ## Project layout
 ```
 backend/asset-handler/   handler.py (routing) · database.py (DynamoDB) · storage.py (S3) · validation.py
+backend/task-handler/    handler.py · database.py · validation.py
+frontend/                React + TypeScript + Vite + Tailwind (Tasks Kanban board)
 scripts/deploy.py        idempotent provisioning + deploy (boto3)
 tests/                   pytest + moto unit tests
 docs/                    design brief, database design, API docs, evidence/
@@ -54,8 +58,17 @@ python3 -m venv .venv && .venv/bin/pip install boto3 pytest moto
    export AWS_SHARED_CREDENTIALS_FILE=$PWD/.aws/credentials AWS_CONFIG_FILE=$PWD/.aws/config
    .venv/bin/python scripts/deploy.py
    ```
-   It creates/updates the DynamoDB table, private S3 bucket, Lambda and Function URL, and writes the URL to `.aws/outputs.json`.
-3. Smoke test: `curl $URL/health`.
+   It creates/updates the DynamoDB tables, private S3 bucket, both Lambdas and their Function URLs, and writes the URLs to `.aws/outputs.json`.
+   Some Learner Lab sessions deny `dynamodb:CreateTable`; the script then warns — create the table in the console (partition key as printed, String, on-demand) and rerun.
+3. Smoke test: `curl $ASSET_URL/health` and `curl $TASK_URL/health`.
+
+## Frontend
+```bash
+cd frontend
+cp .env.example .env.local   # fill in assetApiUrl / taskApiUrl from .aws/outputs.json
+npm install && npm run dev
+```
+Kanban supports drag-and-drop between columns (optimistic update with rollback), create/edit/delete, and search/status/priority/category/assignee filters (applied client-side over the fetched list).
 
 Credentials expire with each lab session; rerun step 1 and the script is safe to run again.
 
