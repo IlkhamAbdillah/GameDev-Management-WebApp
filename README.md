@@ -4,24 +4,13 @@
 
 Lightweight game-development workspace for small indie teams: asset library (Assets), Kanban task board (Tasks) and Gantt-style schedule (Timeline). Built on an AWS serverless stack.
 
-> Status: **Phases 1–4** implemented: Asset CRUD + S3 file upload/download/preview, Task API + Kanban, Timeline API + Gantt chart. Phase 5 (polish, extra tests, final docs) remains (see `plan.md`).
+> Status: **All five roadmap phases implemented**: Asset CRUD + nested folders + S3 upload/download/preview (images, audio, `.glb` 3D), Task API + Kanban, Timeline API + Gantt chart, plus tests, diagram and verification tooling. See [docs/testing.md](docs/testing.md).
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  C[Client / Postman / curl] -->|HTTPS JSON| U[Lambda Function URLs]
-  subgraph AWS us-east-1
-    U --> L[Lambda: GameVaultAssetHandler<br/>Python 3.12]
-    U --> T[Lambda: GameVaultTaskHandler<br/>Python 3.12]
-    T -->|CRUD| D2[(DynamoDB<br/>GameVaultTasks)]
-    L -->|CRUD| D[(DynamoDB<br/>GameVaultAssets)]
-    L -->|head_bucket / pre-signed URLs - Phase 4| S[(S3 private bucket<br/>gamevault-assets-ACCOUNT)]
-    L -.logs.-> CW[CloudWatch Logs]
-    IAM[IAM role LabRole] -.assumed by.-> L
-  end
-  C -.direct upload via pre-signed URL, Phase 4.-> S
-```
+![GameVault architecture](docs/architecture.png)
+
+Request flow: client → Lambda Function URL → Lambda → DynamoDB / S3 (files travel straight between the browser and S3 through pre-signed URLs). Regenerate the diagram with `.venv/bin/python scripts/make_architecture.py`.
 
 Security boundaries: the bucket is private (Block Public Access on, SSE-S3); the browser never sees AWS credentials; only the Lambda role can reach DynamoDB/S3.
 
@@ -33,6 +22,7 @@ Also in Learner Lab: IAM roles cannot be created, so `LabRole` is used. Least-pr
 ## Limitations (MVP)
 - **No authentication.** The Function URL is public (`AuthType NONE`); anyone with the URL can call the API. Acceptable only for the academic MVP.
 - CORS allows `*` for development.
+- The frontend runs locally (`npm run dev`); it is not hosted on AWS, because a static-website bucket would have to be public and the Learner Lab denies CloudFront/API Gateway.
 - List endpoints use DynamoDB `Scan` (fine for small datasets; add a GSI if it grows).
 
 ## Project layout
@@ -75,6 +65,14 @@ Timeline: simplified Gantt chart (bar position = start date, length = duration, 
 Kanban supports drag-and-drop between columns (optimistic update with rollback), create/edit/delete, and search/status/priority/category/assignee filters (applied client-side over the fetched list).
 
 Credentials expire with each lab session; rerun step 1 and the script is safe to run again.
+
+## Testing
+```bash
+.venv/bin/python -m pytest tests -q          # 103 backend tests (moto)
+cd frontend && npm test && npm run build     # 21 unit tests + strict type-check/build
+.venv/bin/python scripts/smoke_test.py       # 54 live checks against the deployed AWS stack
+```
+A Postman collection is in `postman/`. Details and the mapping to the specification's checklist: [docs/testing.md](docs/testing.md). CI (`.github/workflows/ci.yml`) runs the backend and frontend tests on every push.
 
 ## API
 See [docs/api-documentation.md](docs/api-documentation.md). Evidence of the deployed run: [docs/evidence/](docs/evidence/).

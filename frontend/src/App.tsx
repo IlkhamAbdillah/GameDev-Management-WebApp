@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import AssetsPage from './pages/AssetsPage'
 import TasksPage from './pages/TasksPage'
@@ -6,6 +7,7 @@ import TimelinePage from './pages/TimelinePage'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -17,5 +19,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   )
 }

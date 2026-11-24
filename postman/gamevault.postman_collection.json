@@ -1,0 +1,1087 @@
+{
+  "info": {
+    "name": "GameVault API",
+    "description": "Run the folders in order (Collection Runner). Set `assetApi` and `taskApi` to the Function URLs from .aws/outputs.json (no trailing slash). Covers the spec's section 9 checklist; each run cleans up after itself.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "assetApi",
+      "value": "https://REPLACE.lambda-url.us-east-1.on.aws"
+    },
+    {
+      "key": "taskApi",
+      "value": "https://REPLACE.lambda-url.us-east-1.on.aws"
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Health / infrastructure",
+      "item": [
+        {
+          "name": "Asset API health (Lambda + DynamoDB + S3)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/health"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('dynamodb and s3 ok', () => { const d = pm.response.json().data; pm.expect(d.dynamodb).to.eql('ok'); pm.expect(d.s3).to.eql('ok'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Task API health (Lambda + DynamoDB)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/health"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('dynamodb ok', () => pm.expect(pm.response.json().data.dynamodb).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 Folders",
+      "item": [
+        {
+          "name": "Create folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/folders"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman-folder\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('folderId', pm.response.json().data.folderId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create nested folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/folders"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"postman-child\",\"parentId\":\"{{folderId}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('childFolderId', pm.response.json().data.folderId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate name -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/folders"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"POSTMAN-FOLDER\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List folders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/folders"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('contains created', () => pm.expect(pm.response.json().data.map(f => f.folderId)).to.include(pm.collectionVariables.get('folderId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Move folder into its child -> 400",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/folders/{{folderId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"parentId\":\"{{childFolderId}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 Assets",
+      "item": [
+        {
+          "name": "Create asset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/assets"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"assetName\":\"postman-asset\",\"assetType\":\"Character\",\"description\":\"from Postman\",\"assignedTo\":\"QA\",\"folderId\":\"{{childFolderId}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data; pm.collectionVariables.set('assetId', d.assetId);",
+                  "pm.test('defaults', () => { pm.expect(d.status).to.eql('Planned'); pm.expect(d.createdAt).to.match(/Z$/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create invalid asset -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/assets"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetName\": \"x\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List assets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search + filter assets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets?search=postman&assetType=Character&folderId={{childFolderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('found', () => pm.expect(pm.response.json().data.length).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get asset details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update asset",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Review\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('updated', () => pm.expect(pm.response.json().data.status).to.eql('Review'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get unknown asset -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets/does-not-exist"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 Asset files (S3)",
+      "item": [
+        {
+          "name": "Disallowed type -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}/upload-url"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"virus.exe\",\n  \"fileSize\": 10\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Generate upload URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}/upload-url"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"model.glb\",\n  \"fileSize\": 16\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.collectionVariables.set('uploadUrl', d.uploadUrl); pm.collectionVariables.set('s3Key', d.s3Key);",
+                  "pm.test('key scoped to asset', () => pm.expect(d.s3Key).to.include('assets/' + pm.collectionVariables.get('assetId') + '/'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload file to S3 (pre-signed PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "model/gltf-binary"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "0123456789abcdef"
+            },
+            "url": {
+              "raw": "{{uploadUrl}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save S3 key on the asset",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"s3Key\":\"{{s3Key}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; pm.test('key stored', () => pm.expect(d.s3Key).to.eql(pm.collectionVariables.get('s3Key')));",
+                  "pm.test('glb previewable', () => pm.expect(d.previewKind).to.eql('model'));",
+                  "pm.collectionVariables.set('downloadUrl', d.downloadUrl);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download via pre-signed GET",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{downloadUrl}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('same bytes', () => pm.expect(pm.response.text()).to.eql('0123456789abcdef'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete file",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}/file"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete file again -> 404",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}/file"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete asset",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted asset -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/assets/{{assetId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete child folder",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/folders/{{childFolderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete parent folder",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{assetApi}}/folders/{{folderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 Tasks",
+      "item": [
+        {
+          "name": "Create task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{taskApi}}/tasks"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"postman-task\",\n  \"description\": \"from Postman\",\n  \"assignee\": \"QA\",\n  \"category\": \"Testing\",\n  \"priority\": \"High\",\n  \"startDate\": \"2031-01-01\",\n  \"dueDate\": \"2031-01-10\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data; pm.collectionVariables.set('taskId', d.taskId);",
+                  "pm.test('defaults + independence', () => { pm.expect(d.status).to.eql('To Do'); pm.expect(d).to.not.have.property('assetId'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create invalid task -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{taskApi}}/tasks"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"x\",\n  \"priority\": \"Urgent\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Due before start -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{taskApi}}/tasks"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"x\",\n  \"startDate\": \"2031-05-02\",\n  \"dueDate\": \"2031-05-01\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List tasks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/tasks"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter tasks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/tasks?status=To%20Do&priority=High&category=Testing&assignee=QA&search=POSTMAN"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('found', () => pm.expect(pm.response.json().data.length).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get task details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/tasks/{{taskId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{taskApi}}/tasks/{{taskId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"postman-task (edited)\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change task status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{taskApi}}/tasks/{{taskId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status changed', () => pm.expect(pm.response.json().data.status).to.eql('In Progress'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get unknown task -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/tasks/does-not-exist"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 Timeline",
+      "item": [
+        {
+          "name": "Timeline in date range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/timeline?startDate=2031-01-05&endDate=2031-01-31&assignee=QA"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data; const e = d.tasks.find(x => x.taskId === pm.collectionVariables.get('taskId'));",
+                  "pm.test('dates, status, assignee', () => { pm.expect(e.startDate).to.eql('2031-01-01'); pm.expect(e.dueDate).to.eql('2031-01-10'); pm.expect(e.status).to.eql('In Progress'); pm.expect(e.assignee).to.eql('QA'); });",
+                  "pm.test('stats', () => pm.expect(d.stats).to.have.keys('total','done','completionRate','byStatus','overdue','dueSoon','unscheduled'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Timeline outside range is empty",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/timeline?startDate=2031-06-01&endDate=2031-06-30&assignee=QA"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('empty', () => pm.expect(pm.response.json().data.tasks).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Move task and re-check timeline",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{taskApi}}/tasks/{{taskId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Done\",\n  \"dueDate\": \"2031-02-20\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Timeline reflects the update",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/timeline?startDate=2031-02-01&endDate=2031-02-28&assignee=QA"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const e = pm.response.json().data.tasks[0]; pm.test('updated', () => { pm.expect(e.status).to.eql('Done'); pm.expect(e.end).to.eql('2031-02-20'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reversed range -> 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/timeline?startDate=2031-02-01&endDate=2031-01-01"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete task",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/tasks/{{taskId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deleted task -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{taskApi}}/tasks/{{taskId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

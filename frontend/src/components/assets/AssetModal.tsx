@@ -5,6 +5,7 @@ import { ALLOWED_EXTENSIONS, TYPE_ICON, formatBytes, previewKindOf, validateFile
 import { folderOptions } from '../../lib/folders'
 import { ASSET_STATUSES, ASSET_TYPES, type Asset, type AssetInput, type Folder } from '../../types'
 import ModelPreview from './ModelPreview'
+import { useEscapeKey } from '../../lib/useEscapeKey'
 
 interface Props {
   asset: Asset | null // null => create
@@ -19,6 +20,7 @@ const field = 'w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outl
 const PANEL = 'min-h-72 lg:min-h-[28rem]'
 
 export default function AssetModal({ asset, folders, defaultFolderId, onClose, onSaved, onDeleted }: Props) {
+  useEscapeKey(onClose)
   const options = folderOptions(folders)
   const [current, setCurrent] = useState<Asset | null>(asset)
   const [form, setForm] = useState<AssetInput>({

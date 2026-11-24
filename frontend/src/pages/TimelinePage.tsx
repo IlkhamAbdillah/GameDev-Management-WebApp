@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { timelineApi } from '../api/tasks'
 import PageHeader from '../components/PageHeader'
 import GanttChart from '../components/timeline/GanttChart'
@@ -27,16 +27,19 @@ export default function TimelinePage() {
   const [error, setError] = useState('')
 
   const end = addDays(start, days - 1)
+  const latest = useRef(0) // only the most recent request may update the page
 
   const load = useCallback(async () => {
+    const id = ++latest.current
     setLoading(true)
     setError('')
     try {
-      setData(await timelineApi.get({ startDate: start, endDate: end, status, category }))
+      const result = await timelineApi.get({ startDate: start, endDate: end, status, category })
+      if (id === latest.current) setData(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load timeline')
+      if (id === latest.current) setError(err instanceof Error ? err.message : 'Failed to load timeline')
     } finally {
-      setLoading(false)
+      if (id === latest.current) setLoading(false)
     }
   }, [start, end, status, category])
 

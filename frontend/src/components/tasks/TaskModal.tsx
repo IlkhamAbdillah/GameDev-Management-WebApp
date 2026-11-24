@@ -7,6 +7,7 @@ import {
   type Task,
   type TaskInput,
 } from '../../types'
+import { useEscapeKey } from '../../lib/useEscapeKey'
 
 interface Props {
   task: Task | null // null => create
@@ -30,6 +31,7 @@ const field =
   'w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent'
 
 export default function TaskModal({ task, onClose, onSave, onDelete }: Props) {
+  useEscapeKey(onClose)
   const [form, setForm] = useState<TaskInput>(
     task
       ? {

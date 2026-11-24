@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { foldersApi } from '../../api/folders'
 import { folderOptions, subtreeIds } from '../../lib/folders'
 import type { Folder } from '../../types'
+import { useEscapeKey } from '../../lib/useEscapeKey'
 
 interface Props {
   folder: Folder | null // null => create
@@ -16,6 +17,7 @@ interface Props {
 const field = 'w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent'
 
 export default function FolderModal({ folder, folders, defaultParentId, onClose, onSaved, onDeleted }: Props) {
+  useEscapeKey(onClose)
   const [name, setName] = useState(folder?.name ?? '')
   const [parentId, setParentId] = useState(folder?.parentId ?? defaultParentId)
   const [busy, setBusy] = useState(false)
