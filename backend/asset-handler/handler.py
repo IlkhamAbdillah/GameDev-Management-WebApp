@@ -5,6 +5,7 @@ import os
 import re
 import time
 
+from auth import PROJECT_MANAGER, AuthError, Forbidden, authenticate, require_role
 from database import AssetNotFound, AssetRepository, FolderNotFound, FolderRepository
 from filetypes import DEFAULT_MAX_UPLOAD_BYTES, asset_prefix, file_name_from_key, preview_kind
 from folders import MAX_DEPTH, depth_of, height_of, is_self_or_descendant, name_taken
@@ -173,8 +174,12 @@ def _update_asset(repo, storage, folders, asset_id, event):
     return updated
 
 
-def handle(event, repo, storage, folders):
-    """Pure routing function; dependencies are injected so it can be unit tested."""
+def handle(event, repo, storage, folders, secret):
+    """Pure routing function; dependencies (and the JWT secret) are injected for unit tests.
+
+    Everyone signed in can read and add/edit assets and upload files. Deleting assets or files and
+    managing folders is project-manager only.
+    """
     http = event.get("requestContext", {}).get("http", {})
     method = http.get("method", "")
     path = event.get("rawPath", "").rstrip("/") or "/"
@@ -184,7 +189,12 @@ def handle(event, repo, storage, folders):
         if path == "/health" and method == "GET":
             return _health(
                 {"assetsTable": repo.ping, "foldersTable": folders.ping, "bucket": storage.ping}
-            )
+            )  # public: used by /connectivity
+
+        principal = authenticate(event, secret)
+
+        if path.startswith("/folders") and method in ("POST", "PUT", "DELETE"):
+            require_role(principal, PROJECT_MANAGER)
 
         if path == "/folders":
             if method == "POST":
@@ -232,6 +242,7 @@ def handle(event, repo, storage, folders):
 
         match = FILE_PATH.match(path)
         if match and method == "DELETE":
+            require_role(principal, PROJECT_MANAGER)
             asset_id = match.group("asset_id")
             key = repo.get(asset_id).get("s3Key")
             if not key:
@@ -248,12 +259,17 @@ def handle(event, repo, storage, folders):
             if method == "PUT":
                 return _ok(_present(_update_asset(repo, storage, folders, asset_id, event), storage))
             if method == "DELETE":
+                require_role(principal, PROJECT_MANAGER)
                 repo.get(asset_id)  # 404 first, so we only ever clean up an existing asset's prefix
                 storage.delete_asset_files(asset_id)
                 repo.delete(asset_id)
                 return _response(204)
 
         return _error(404, "Route not found")
+    except AuthError as err:
+        return _error(401, str(err))
+    except Forbidden as err:
+        return _error(403, str(err))
     except ValidationError as err:
         return _error(400, str(err))
     except AssetNotFound:
@@ -284,4 +300,4 @@ def _get_dependencies():
 
 def lambda_handler(event, context):
     repo, storage, folders = _get_dependencies()
-    return handle(event, repo, storage, folders)
+    return handle(event, repo, storage, folders, os.environ["JWT_SECRET"])

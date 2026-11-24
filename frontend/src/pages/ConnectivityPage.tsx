@@ -5,11 +5,13 @@ import ArchitectureDiagram from '../components/connectivity/ArchitectureDiagram'
 import NodePanel from '../components/connectivity/NodePanel'
 import StatusBar from '../components/connectivity/StatusBar'
 import PageHeader from '../components/PageHeader'
+import { useAuth } from '../lib/authContext'
 import { getState, hopController, isStale, refreshStatuses, startChecks, startRoundTrip, subscribe } from '../lib/connectivityStore'
 import type { NodeId } from '../lib/flowModel'
 import { deriveStatusBar } from '../lib/statusBar'
 
 export default function ConnectivityPage() {
+  const { isManager } = useAuth() // the round trip creates and deletes data, which needs a project-manager sign-in
   // Statuses are already there when the page opens (the app checks quietly in the background). If they are
   // older than 30 s they are refreshed in place: no animation, no reset to grey.
   const state = useSyncExternalStore(subscribe, getState)
@@ -31,7 +33,7 @@ export default function ConnectivityPage() {
             <button onClick={() => void startChecks(true)} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:brightness-110 disabled:opacity-50">
               <Play size={15} /> {mode === 'checking' ? 'Running…' : 'Run test'}
             </button>
-            <button onClick={() => void startRoundTrip()} disabled={busy} className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-slate-200 hover:bg-surface-2 disabled:opacity-50">
+            <button onClick={() => void startRoundTrip()} disabled={busy || !isManager} title={isManager ? undefined : 'Sign in as a project manager to run the round trip'} className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-slate-200 hover:bg-surface-2 disabled:opacity-50">
               <PlayCircle size={15} /> {mode === 'roundtrip' ? 'Running…' : 'Full round-trip test'}
             </button>
           </div>

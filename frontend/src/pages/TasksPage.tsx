@@ -1,22 +1,29 @@
 import { Plus, RefreshCw, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usersApi } from '../api/auth'
 import { tasksApi } from '../api/tasks'
 import PageHeader from '../components/PageHeader'
 import KanbanBoard from '../components/tasks/KanbanBoard'
 import TaskModal from '../components/tasks/TaskModal'
+import { useAuth } from '../lib/authContext'
+import { canEditTask } from '../lib/permissions'
 import {
   TASK_CATEGORIES,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  type MemberTaskInput,
   type Task,
   type TaskInput,
   type TaskStatus,
+  type User,
 } from '../types'
 
 const select =
   'rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent'
 
 export default function TasksPage() {
+  const { user, isManager } = useAuth()
+  const [users, setUsers] = useState<User[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -42,6 +49,11 @@ export default function TasksPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Only project managers pick assignees, and only they may list accounts.
+  useEffect(() => {
+    if (isManager) usersApi.list().then(setUsers).catch(() => setUsers([]))
+  }, [isManager])
 
   const assignees = useMemo(
     () => [...new Set(tasks.map((t) => t.assignee).filter(Boolean))].sort(),
@@ -73,7 +85,7 @@ export default function TasksPage() {
     }
   }
 
-  async function save(input: TaskInput) {
+  async function save(input: TaskInput | MemberTaskInput) {
     if (modal?.task) {
       const saved = await tasksApi.update(modal.task.taskId, input)
       setTasks((all) => all.map((t) => (t.taskId === saved.taskId ? saved : t)))
@@ -142,11 +154,11 @@ export default function TasksPage() {
       {loading && tasks.length === 0 ? (
         <p className="py-16 text-center text-sm text-slate-400">Loading tasks…</p>
       ) : (
-        <KanbanBoard tasks={filtered} visibleStatuses={visibleStatuses} onOpen={(task) => setModal({ task })} onMove={(id, s) => void move(id, s)} />
+        <KanbanBoard tasks={filtered} visibleStatuses={visibleStatuses} onOpen={(task) => setModal({ task })} onMove={(id, s) => void move(id, s)} canMove={(task) => canEditTask(user, task)} />
       )}
 
       {modal && (
-        <TaskModal key={modal.task?.taskId ?? 'new'} task={modal.task} onClose={() => setModal(null)} onSave={save} onDelete={modal.task ? remove : undefined} />
+        <TaskModal key={modal.task?.taskId ?? 'new'} task={modal.task} onClose={() => setModal(null)} onSave={save} onDelete={modal.task && isManager ? remove : undefined} users={users} />
       )}
     </div>
   )

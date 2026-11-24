@@ -6,6 +6,7 @@ import re
 import time
 from datetime import datetime, timezone
 
+from auth import PROJECT_MANAGER, AuthError, Forbidden, authenticate, require_role
 from database import TaskNotFound, TaskRepository
 from timeline import build_timeline
 from validation import (
@@ -19,6 +20,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TASK_PATH = re.compile(r"^/tasks/(?P<task_id>[^/]+)$")
+# Scheduling and assignment belong to the project manager; members edit the content and status
+# of the tasks assigned to them.
+MANAGER_ONLY_FIELDS = ("startDate", "dueDate", "assignee", "assigneeId")
 _repo = None
 
 
@@ -74,11 +78,35 @@ def _parse_body(event):
         raise ValidationError("Request body must be valid JSON") from err
 
 
-def _update(repo, task_id, event):
-    fields = validate_task_payload(_parse_body(event), partial=True)
+def _forbid_manager_only_fields(body):
+    if isinstance(body, dict) and any(field in body for field in MANAGER_ONLY_FIELDS):
+        raise Forbidden("Only a project manager can set dates or assignees")
+
+
+def _create(repo, principal, event):
+    body = _parse_body(event)
+    if not principal.is_manager:
+        _forbid_manager_only_fields(body)
+    fields = validate_task_payload(body)
+    if not principal.is_manager:  # a member's own task is assigned to them
+        fields["assignee"], fields["assigneeId"] = principal.name, principal.user_id
+    return repo.create(fields)
+
+
+def _update(repo, principal, task_id, event):
+    body = _parse_body(event)
+    current = None
+    if not principal.is_manager:
+        current = repo.get(task_id)  # 404 first
+        if current.get("assigneeId") != principal.user_id:
+            raise Forbidden("Members can only edit tasks assigned to them")
+        _forbid_manager_only_fields(body)
+    fields = validate_task_payload(body, partial=True)
+    if "assignee" in fields and "assigneeId" not in fields:
+        fields["assigneeId"] = ""  # a free-text assignee is no longer linked to a user account
     if "startDate" in fields or "dueDate" in fields:
         # A partial update may change only one date: check order against the stored record.
-        current = repo.get(task_id)
+        current = current or repo.get(task_id)
         validate_date_order(
             fields.get("startDate", current.get("startDate", "")),
             fields.get("dueDate", current.get("dueDate", "")),
@@ -86,8 +114,8 @@ def _update(repo, task_id, event):
     return repo.update(task_id, fields)
 
 
-def handle(event, repo, today=None):
-    """Pure routing function; the repository (and today) are injected for unit tests."""
+def handle(event, repo, secret, today=None):
+    """Pure routing function; the repository, JWT secret (and today) are injected for unit tests."""
     http = event.get("requestContext", {}).get("http", {})
     method = http.get("method", "")
     path = event.get("rawPath", "").rstrip("/") or "/"
@@ -95,7 +123,9 @@ def handle(event, repo, today=None):
 
     try:
         if path == "/health" and method == "GET":
-            return _health({"tasksTable": repo.ping})
+            return _health({"tasksTable": repo.ping})  # public: used by /connectivity
+
+        principal = authenticate(event, secret)
 
         if path == "/timeline" and method == "GET":
             q = validate_timeline_query(query)
@@ -107,7 +137,7 @@ def handle(event, repo, today=None):
 
         if path == "/tasks":
             if method == "POST":
-                return _ok(repo.create(validate_task_payload(_parse_body(event))), 201)
+                return _ok(_create(repo, principal, event), 201)
             if method == "GET":
                 return _ok(
                     repo.list(
@@ -125,12 +155,17 @@ def handle(event, repo, today=None):
             if method == "GET":
                 return _ok(repo.get(task_id))
             if method == "PUT":
-                return _ok(_update(repo, task_id, event))
+                return _ok(_update(repo, principal, task_id, event))
             if method == "DELETE":
+                require_role(principal, PROJECT_MANAGER)
                 repo.delete(task_id)
                 return _response(204)
 
         return _error(404, "Route not found")
+    except AuthError as err:
+        return _error(401, str(err))
+    except Forbidden as err:
+        return _error(403, str(err))
     except ValidationError as err:
         return _error(400, str(err))
     except TaskNotFound:
@@ -144,4 +179,4 @@ def lambda_handler(event, context):
     global _repo
     if _repo is None:
         _repo = TaskRepository.from_table_name(os.environ["TASKS_TABLE"])
-    return handle(event, _repo)
+    return handle(event, _repo, os.environ["JWT_SECRET"])

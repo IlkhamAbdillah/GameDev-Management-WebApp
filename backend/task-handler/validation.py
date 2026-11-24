@@ -10,9 +10,10 @@ DEFAULT_CATEGORY = "Other"
 
 # Fields a client may set. taskId / createdAt / updatedAt are server-controlled.
 MUTABLE_FIELDS = (
-    "title", "description", "assignee", "category", "priority", "status", "startDate", "dueDate",
+    "title", "description", "assignee", "assigneeId", "category", "priority", "status",
+    "startDate", "dueDate",
 )
-MAX_LENGTHS = {"title": 120, "description": 2000, "assignee": 100}
+MAX_LENGTHS = {"title": 120, "description": 2000, "assignee": 100, "assigneeId": 64}
 
 
 class ValidationError(ValueError):
@@ -84,6 +85,7 @@ def validate_task_payload(payload, partial=False):
             raise ValidationError("title is required")
         clean.setdefault("description", "")
         clean.setdefault("assignee", "")
+        clean.setdefault("assigneeId", "")
         clean.setdefault("category", DEFAULT_CATEGORY)
         clean.setdefault("priority", DEFAULT_PRIORITY)
         clean.setdefault("status", DEFAULT_STATUS)

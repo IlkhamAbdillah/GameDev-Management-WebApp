@@ -5,7 +5,7 @@ import { getState, isStale, refreshStatuses, resetConnectivityState, startChecks
 const ok = (checks: HealthResult['checks']): HealthResult => ({ reachable: true, httpStatus: 200, roundTripMs: 100, status: 'ok', checks })
 const fetchers = {
   asset: async () => ok({ assetsTable: { ok: true, ms: 5 }, foldersTable: { ok: true, ms: 6 }, bucket: { ok: true, ms: 7 } }),
-  task: async () => ok({ tasksTable: { ok: true, ms: 8 } }),
+  task: async () => ok({ tasksTable: { ok: true, ms: 8 } }), auth: async () => ok({ usersTable: { ok: true, ms: 9 } }),
 }
 
 beforeEach(() => resetConnectivityState())
@@ -27,6 +27,7 @@ describe('connectivity store', () => {
     expect(s.lastRunAt).toBeTypeOf('number')
     expect(s.statuses.assetsTable).toEqual({ state: 'ok', ms: 5 })
     expect(s.statuses.tasksTable).toEqual({ state: 'ok', ms: 8 })
+    expect(s.statuses.usersTable).toEqual({ state: 'ok', ms: 9 })
     expect(s.log.length).toBeGreaterThan(0)
   })
 
@@ -44,7 +45,7 @@ describe('connectivity store', () => {
   })
 
   it('returns to idle even if the check throws', async () => {
-    await startChecks(false, { asset: async () => { throw new Error('boom') }, task: async () => ok({}) }).catch(() => {})
+    await startChecks(false, { asset: async () => { throw new Error('boom') }, task: async () => ok({}), auth: async () => ok({ usersTable: { ok: true, ms: 9 } }) }).catch(() => {})
     expect(getState().mode).toBe('idle')
   })
 })
@@ -53,6 +54,7 @@ describe('quiet background refresh', () => {
   const healthy = () => ({
     asset: async () => ok({ assetsTable: { ok: true, ms: 5 }, foldersTable: { ok: true, ms: 6 }, bucket: { ok: true, ms: 7 } }),
     task: async () => ok({ tasksTable: { ok: true, ms: 8 } }),
+    auth: async () => ok({ usersTable: { ok: true, ms: 9 } }),
   })
 
   it('fills in every status without a visible run: no log, no mode change, no animation', async () => {
@@ -69,7 +71,7 @@ describe('quiet background refresh', () => {
     await refreshStatuses(healthy())
     let release!: () => void
     const gate = new Promise<void>((resolve) => (release = resolve))
-    const slow = { asset: async () => (await gate, ok({ assetsTable: { ok: false, ms: 9, error: 'AccessDeniedException' }, foldersTable: { ok: true, ms: 6 }, bucket: { ok: true, ms: 7 } })), task: async () => ok({ tasksTable: { ok: true, ms: 8 } }) }
+    const slow = { asset: async () => (await gate, ok({ assetsTable: { ok: false, ms: 9, error: 'AccessDeniedException' }, foldersTable: { ok: true, ms: 6 }, bucket: { ok: true, ms: 7 } })), task: async () => ok({ tasksTable: { ok: true, ms: 8 } }), auth: async () => ok({ usersTable: { ok: true, ms: 9 } }) }
     const pending = refreshStatuses(slow)
     expect(getState().refreshing).toBe(true)
     expect(getState().statuses.assetsTable).toEqual({ state: 'ok', ms: 5 }) // old value still shown
@@ -81,7 +83,7 @@ describe('quiet background refresh', () => {
 
   it('shares one request between concurrent callers (e.g. app load + page open)', async () => {
     let calls = 0
-    const counting = { asset: async () => (calls++, ok({ assetsTable: { ok: true, ms: 1 }, foldersTable: { ok: true, ms: 1 }, bucket: { ok: true, ms: 1 } })), task: async () => ok({ tasksTable: { ok: true, ms: 1 } }) }
+    const counting = { asset: async () => (calls++, ok({ assetsTable: { ok: true, ms: 1 }, foldersTable: { ok: true, ms: 1 }, bucket: { ok: true, ms: 1 } })), task: async () => ok({ tasksTable: { ok: true, ms: 1 } }), auth: async () => ok({ usersTable: { ok: true, ms: 9 } }) }
     await Promise.all([refreshStatuses(counting), refreshStatuses(counting)])
     expect(calls).toBe(1)
   })

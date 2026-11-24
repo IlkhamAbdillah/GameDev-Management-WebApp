@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, request } from './client'
+import { getSession, setSession } from './session'
+import type { User } from '../types'
 
 const reply = (status: number, body?: unknown) =>
   vi.stubGlobal('fetch', vi.fn(async () => new Response(body === undefined ? null : JSON.stringify(body), { status })))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  setSession(null)
+})
+
+const user: User = { userId: 'u1', name: 'Pat', email: 'p@x.co', role: 'member', createdAt: '', updatedAt: '' }
+const signIn = (expiresAt = Date.now() / 1000 + 3600) => setSession({ token: 'tok123', expiresAt, user })
 
 describe('request', () => {
   it('unwraps the success envelope', async () => {
@@ -43,5 +51,45 @@ describe('request', () => {
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit][]
     expect(calls[0][1].headers).toMatchObject({ 'Content-Type': 'application/json' })
     expect(calls[1][1].headers).toBeUndefined()
+  })
+
+  it('sends the bearer token when signed in and no Authorization header when not', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, data: null }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await request('https://api', '/x')
+    signIn()
+    await request('https://api', '/x')
+    await request('https://api', '/x', { method: 'POST', body: '{}' })
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][]
+    expect(calls[0][1].headers).toBeUndefined()
+    expect(calls[1][1].headers).toEqual({ Authorization: 'Bearer tok123' })
+    expect(calls[2][1].headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer tok123' })
+  })
+
+  it('signs out when the server answers 401 to an authenticated request', async () => {
+    signIn()
+    reply(401, { success: false, message: 'Invalid or expired token' })
+    await expect(request('https://api', '/x')).rejects.toMatchObject({ status: 401, message: /session has expired/ })
+    expect(getSession()).toBeNull()
+  })
+
+  it('keeps the server message for a 401 without a session (wrong password)', async () => {
+    reply(401, { success: false, message: 'Invalid email or password' })
+    await expect(request('https://api', '/auth/login', { method: 'POST', body: '{}' })).rejects.toMatchObject({
+      status: 401,
+      message: 'Invalid email or password',
+    })
+  })
+
+  it('does not treat an expired stored session as signed in', async () => {
+    signIn(Date.now() / 1000 - 5)
+    expect(getSession()).toBeNull()
+  })
+
+  it('does not sign out on a 403', async () => {
+    signIn()
+    reply(403, { success: false, message: 'You do not have permission to do this' })
+    await expect(request('https://api', '/x')).rejects.toMatchObject({ status: 403 })
+    expect(getSession()?.token).toBe('tok123')
   })
 })

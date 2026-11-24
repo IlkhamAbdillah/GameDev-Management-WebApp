@@ -5,11 +5,15 @@ Usage:
   AWS_SHARED_CREDENTIALS_FILE=.aws/credentials AWS_CONFIG_FILE=.aws/config \
       .venv/bin/python scripts/smoke_test.py | tee docs/evidence/smoke-test-output.txt
 
-Reads the Function URLs from .aws/outputs.json. Everything it creates is prefixed "smoke-" and is
+Reads the Function URLs from .aws/outputs.json. It creates its own throw-away accounts (a project
+manager written straight into GameVaultUsers (profile awsstudent, see GV_DB_PROFILE) with a random password, then a member through the API),
+so no real password is needed. Everything it creates is prefixed "smoke-" and is
 removed again at the end (even on failure). The S3 and CloudWatch checks use boto3 and are skipped
 with a notice if credentials are unavailable. Exit code 1 if any check fails.
 """
 import json
+import os
+import secrets
 import sys
 import time
 import urllib.error
@@ -17,8 +21,10 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "backend" / "shared"), str(ROOT / "backend" / "auth-handler")]
 OUT = json.loads((ROOT / ".aws" / "outputs.json").read_text())
-ASSET, TASK = OUT["assetApiUrl"], OUT["taskApiUrl"]
+ASSET, TASK, AUTH = OUT["assetApiUrl"], OUT["taskApiUrl"], OUT["authApiUrl"]
+BEARER = {}  # {"Authorization": ...}; sent only to our own APIs (never to pre-signed S3 URLs)
 BUCKET = OUT["bucket"]
 RESULTS = []
 
@@ -30,8 +36,9 @@ def check(name, ok, detail=""):
 
 
 def http(method, url, body=None, headers=None, raw=False):
+    headers = {**(BEARER if url.startswith((ASSET, TASK, AUTH)) else {}), **(headers or {})}
     data = body if isinstance(body, bytes) else (json.dumps(body).encode() if body is not None else None)
-    request = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
     if body is not None and not isinstance(body, bytes):
         request.add_header("Content-Type", "application/json")
     try:
@@ -48,15 +55,92 @@ def data(response):
     return (response[1] or {}).get("data")
 
 
+def as_user(token):
+    BEARER.clear()
+    if token:
+        BEARER["Authorization"] = f"Bearer {token}"
+
+
+def login(email, password):
+    as_user(None)
+    status, body = http("POST", f"{AUTH}/auth/login", {"email": email, "password": password})
+    return status, (body or {}).get("data")
+
+
 def run():
-    created = {"assets": [], "folders": [], "tasks": []}
+    import boto3
+    from auth import PROJECT_MANAGER, hash_password
+    from database import UserRepository
+
+    created = {"assets": [], "folders": [], "tasks": [], "users": []}
+    # The default role (voclabs) can read but not write DynamoDB directly; the lab IAM user can.
+    users = UserRepository(boto3.Session(profile_name=os.environ.get("GV_DB_PROFILE", "awsstudent")).resource("dynamodb").Table("GameVaultUsers"))
+    tag = secrets.token_hex(3)
+    pm_email, pm_password = f"smoke-pm-{tag}@example.com", secrets.token_urlsafe(18)
+    pm = users.create({"name": "smoke-pm", "email": pm_email, "role": PROJECT_MANAGER, "passwordHash": hash_password(pm_password)})
+    created["users"].append(pm["userId"])
+    pm_token = None
     try:
+        # ---------------------------------------------------------------- authentication
+        print("== Authentication and roles")
+        check("auth API /health -> Lambda + DynamoDB (users), no token needed", http("GET", f"{AUTH}/health")[0] == 200)
+        check("wrong password -> 401", login(pm_email, "definitely-wrong")[0] == 401)
+        check("unknown email -> 401", login(f"smoke-ghost-{tag}@example.com", "x" * 12)[0] == 401)
+        status, session = login(pm_email, pm_password)
+        check("project manager can sign in", status == 200 and session["user"]["role"] == PROJECT_MANAGER and "passwordHash" not in session["user"])
+        pm_token = session["token"]
+        as_user(None)
+        check("no token -> 401 on tasks, assets, folders and timeline", [http("GET", f"{TASK}/tasks")[0], http("GET", f"{ASSET}/assets")[0], http("GET", f"{ASSET}/folders")[0], http("GET", f"{TASK}/timeline")[0]] == [401] * 4)
+        as_user(pm_token[:-3] + "abc")
+        check("tampered token -> 401", http("GET", f"{TASK}/tasks")[0] == 401)
+        as_user(pm_token)
+        check("GET /auth/me returns the account", data(http("GET", f"{AUTH}/auth/me"))["email"] == pm_email)
+        member_email, member_password = f"smoke-member-{tag}@example.com", secrets.token_urlsafe(18)
+        made = http("POST", f"{AUTH}/users", {"name": "smoke-member", "email": member_email, "password": member_password, "role": "member"})
+        check("project manager creates a member -> 201 without hash", made[0] == 201 and "passwordHash" not in data(made))
+        member = data(made)
+        created["users"].append(member["userId"])
+        check("duplicate email -> 400", http("POST", f"{AUTH}/users", {"name": "x", "email": member_email.upper(), "password": "long-enough-1", "role": "member"})[0] == 400)
+        check("cannot delete your own account -> 400", http("DELETE", f"{AUTH}/users/{pm['userId']}")[0] == 400)
+        check("a project manager cannot be changed to a member -> 400", http("PUT", f"{AUTH}/users/{pm['userId']}", {"role": "member"})[0] == 400)
+        pm_task = data(http("POST", f"{TASK}/tasks", {"title": "smoke-pm-task", "assignee": "smoke-someone-else"}))
+        created["tasks"].append(pm_task["taskId"])
+        own = data(http("POST", f"{TASK}/tasks", {"title": "smoke-member-task", "assignee": member["name"], "assigneeId": member["userId"]}))
+        created["tasks"].append(own["taskId"])
+
+        status, member_session = login(member_email, member_password)
+        check("member can sign in", status == 200 and member_session["user"]["role"] == "member")
+        as_user(member_session["token"])
+        check("member can read tasks, assets, folders and timeline", [http("GET", f"{TASK}/tasks")[0], http("GET", f"{ASSET}/assets")[0], http("GET", f"{ASSET}/folders")[0], http("GET", f"{TASK}/timeline")[0]] == [200] * 4)
+        check("member cannot list or create users -> 403", [http("GET", f"{AUTH}/users")[0], http("POST", f"{AUTH}/users", {"name": "x", "email": f"smoke-evil-{tag}@example.com", "password": "long-enough-1", "role": "project_manager"})[0]] == [403, 403])
+        check("member cannot manage folders -> 403", http("POST", f"{ASSET}/folders", {"name": "smoke-nope"})[0] == 403)
+        check("member can edit their own task", http("PUT", f"{TASK}/tasks/{own['taskId']}", {"status": "In Progress"})[0] == 200)
+        check("member cannot edit someone else's task -> 403", http("PUT", f"{TASK}/tasks/{pm_task['taskId']}", {"status": "Done"})[0] == 403)
+        check("member cannot set dates or reassign -> 403", [http("PUT", f"{TASK}/tasks/{own['taskId']}", {"dueDate": "2031-01-01"})[0], http("PUT", f"{TASK}/tasks/{own['taskId']}", {"assigneeId": pm["userId"]})[0]] == [403, 403])
+        check("member cannot delete a task -> 403", http("DELETE", f"{TASK}/tasks/{own['taskId']}")[0] == 403)
+        mine = http("POST", f"{TASK}/tasks", {"title": "smoke-member-created"})
+        check("a task created by a member is assigned to them", mine[0] == 201 and data(mine)["assigneeId"] == member["userId"])
+        created["tasks"].append(data(mine)["taskId"])
+        member_asset = http("POST", f"{ASSET}/assets", {"assetName": "smoke-member-asset", "assetType": "Props"})
+        check("member can create an asset", member_asset[0] == 201)
+        created["assets"].append(data(member_asset)["assetId"])
+        check("member cannot delete an asset -> 403", http("DELETE", f"{ASSET}/assets/{data(member_asset)['assetId']}")[0] == 403)
+        as_user(pm_token)
+        check("deleted account stops being authenticated by /auth/me", http("DELETE", f"{AUTH}/users/{member['userId']}")[0] == 204)
+        as_user(member_session["token"])
+        check("  (its token is rejected by /auth/me -> 401)", http("GET", f"{AUTH}/auth/me")[0] == 401)
+        created["users"].remove(member["userId"])
+        as_user(pm_token)
+
         # ---------------------------------------------------------------- connectivity
         print("== Connectivity (API Gateway-equivalent entry, Lambda, DynamoDB, S3)")
+        as_user(None)
         status, body = http("GET", f"{ASSET}/health")
         checks = (body.get("data") or {}).get("checks", {})
         check("asset API /health -> Lambda + DynamoDB (assets, folders) + S3", status == 200 and set(checks) == {"assetsTable", "foldersTable", "bucket"} and all(c["ok"] for c in checks.values()), body)
+        as_user(None)
         status, body = http("GET", f"{TASK}/health")
+        as_user(pm_token)
         check("task API /health -> Lambda + DynamoDB (tasks)", status == 200 and body["data"]["checks"]["tasksTable"]["ok"], body)
 
         # ---------------------------------------------------------------- folders
@@ -135,7 +219,8 @@ def run():
         task_id = data(a)["taskId"]
         created["tasks"].append(task_id)
         b = make(title="smoke-b", category="Art", assignee="smoke2", startDate="2031-03-01", dueDate="2031-03-05", status="In Review")
-        created["tasks"].append(data(b)["taskId"])
+        b_id = data(b)["taskId"]
+        created["tasks"].append(b_id)
         check("tasks and assets are independent (no assetId on a task)", "assetId" not in data(a))
         check("invalid task -> 400", make(title="x", priority="Urgent")[0] == 400)
         check("due before start -> 400", make(title="x", startDate="2031-05-02", dueDate="2031-05-01")[0] == 400)
@@ -155,8 +240,8 @@ def run():
         check("timeline returns the task with start/due dates, status and assignee", [e["taskId"] for e in window["tasks"]] == [task_id] and (entry["startDate"], entry["dueDate"], entry["status"], entry["assignee"]) == ("2031-01-01", "2031-01-10", "In Progress", "smoke"))
         check("date range filter excludes tasks outside the window", data(http("GET", f"{TASK}/timeline?startDate=2031-02-01&endDate=2031-02-28&assignee=smoke*"))["tasks"] == [])
         both = data(http("GET", f"{TASK}/timeline?startDate=2031-01-01&endDate=2031-12-31"))
-        check("window across both tasks", {t["taskId"] for t in both["tasks"]} >= set(created["tasks"]))
-        check("timeline status filter", [e["taskId"] for e in data(http("GET", f"{TASK}/timeline?status=In%20Review&startDate=2031-01-01&endDate=2031-12-31"))["tasks"]] == [created["tasks"][1]])
+        check("window across both tasks", {t["taskId"] for t in both["tasks"]} >= {task_id, b_id})
+        check("timeline status filter", [e["taskId"] for e in data(http("GET", f"{TASK}/timeline?status=In%20Review&startDate=2031-01-01&endDate=2031-12-31"))["tasks"]] == [b_id])
         check("timeline stats present", {"total", "done", "completionRate", "byStatus", "overdue", "dueSoon", "unscheduled"} <= set(both["stats"]))
         http("PUT", f"{TASK}/tasks/{task_id}", {"status": "Done", "dueDate": "2031-02-20"})
         after = [e for e in data(http("GET", f"{TASK}/timeline?startDate=2031-02-01&endDate=2031-02-28"))["tasks"] if e["taskId"] == task_id]
@@ -165,12 +250,14 @@ def run():
 
         # ---------------------------------------------------------------- CORS
         print("== CORS")
-        for name, url in (("asset", f"{ASSET}/assets"), ("task", f"{TASK}/tasks")):
-            req = urllib.request.Request(url, method="OPTIONS", headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "content-type"})
+        for name, url in (("asset", f"{ASSET}/assets"), ("task", f"{TASK}/tasks"), ("auth", f"{AUTH}/users")):
+            req = urllib.request.Request(url, method="OPTIONS", headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "content-type,authorization"})
             with urllib.request.urlopen(req, timeout=30) as response:
-                check(f"{name} API CORS preflight", response.status == 200 and response.headers.get("Access-Control-Allow-Origin") in ("*", "http://localhost:5173"))
+                allowed = response.headers.get("Access-Control-Allow-Headers", "").lower()
+                check(f"{name} API CORS preflight (allows the Authorization header)", response.status == 200 and response.headers.get("Access-Control-Allow-Origin") in ("*", "http://localhost:5173") and "authorization" in allowed, allowed)
     finally:
         print("== Cleanup")
+        as_user(pm_token)
         for task in created["tasks"]:
             http("DELETE", f"{TASK}/tasks/{task}")
         for asset in created["assets"]:
@@ -178,7 +265,10 @@ def run():
         for folder in reversed(created["folders"]):
             http("DELETE", f"{ASSET}/folders/{folder}")
         leftovers = [a for a in data(http("GET", f"{ASSET}/assets")) if a["assetName"].startswith("smoke-")] + [t for t in data(http("GET", f"{TASK}/tasks")) if t["title"].startswith("smoke-")]
-        check("all smoke data removed", not leftovers, leftovers)
+        for user_id in created["users"]:
+            users.delete(user_id)
+        as_user(None)
+        check("all smoke data removed", not leftovers and not [u for u in users.list() if u["name"].startswith("smoke-")], leftovers)
 
     # -------------------------------------------------------------------- CloudWatch
     print("== CloudWatch")
@@ -187,7 +277,7 @@ def run():
 
         logs = boto3.client("logs")
         time.sleep(8)  # log delivery lag
-        for function in ("GameVaultAssetHandler", "GameVaultTaskHandler"):
+        for function in ("GameVaultAssetHandler", "GameVaultTaskHandler", "GameVaultAuthHandler"):
             group = f"/aws/lambda/{function}"
             stream = logs.describe_log_streams(logGroupName=group, orderBy="LastEventTime", descending=True, limit=1)["logStreams"][0]["logStreamName"]
             events = logs.get_log_events(logGroupName=group, logStreamName=stream, limit=50)["events"]

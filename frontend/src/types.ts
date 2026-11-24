@@ -19,6 +19,8 @@ export interface Task {
   title: string
   description: string
   assignee: string
+  /** Account the task is assigned to; absent/empty for unassigned or free-text assignees. */
+  assigneeId?: string
   category: TaskCategory
   priority: TaskPriority
   status: TaskStatus
@@ -30,8 +32,11 @@ export interface Task {
 
 export type TaskInput = Pick<
   Task,
-  'title' | 'description' | 'assignee' | 'category' | 'priority' | 'status' | 'startDate' | 'dueDate'
+  'title' | 'description' | 'assignee' | 'assigneeId' | 'category' | 'priority' | 'status' | 'startDate' | 'dueDate'
 >
+
+/** Members may not send dates or assignees; the server rejects those fields with 403. */
+export type MemberTaskInput = Pick<TaskInput, 'title' | 'description' | 'category' | 'priority' | 'status'>
 
 export interface TimelineEntry {
   taskId: string
@@ -110,4 +115,23 @@ export interface UploadTicket {
   headers: Record<string, string>
   s3Key: string
   expiresIn: number
+}
+
+export const ROLES = ['project_manager', 'member'] as const
+export type Role = (typeof ROLES)[number]
+
+export interface User {
+  userId: string
+  name: string
+  email: string
+  role: Role
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LoginResult {
+  token: string
+  /** Unix seconds. */
+  expiresAt: number
+  user: User
 }

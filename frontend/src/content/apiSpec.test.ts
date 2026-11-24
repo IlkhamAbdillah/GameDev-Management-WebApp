@@ -17,13 +17,15 @@ describe('API reference data', () => {
       ['GET', '/folders'], ['POST', '/folders'], ['PUT', '/folders/{folderId}'], ['DELETE', '/folders/{folderId}'],
       ['GET', '/tasks'], ['POST', '/tasks'], ['PUT', '/tasks/{taskId}'], ['DELETE', '/tasks/{taskId}'],
       ['GET', '/timeline'], ['GET', '/health'],
+      ['POST', '/auth/login'], ['GET', '/auth/me'], ['POST', '/auth/password'],
+      ['GET', '/users'], ['POST', '/users'], ['PUT', '/users/{userId}'], ['DELETE', '/users/{userId}'],
     ]) expect(has(method, path), `${method} ${path}`).toBe(true)
   })
 
   it('uses 204 for deletes and 201 for creates', () => {
     for (const e of endpoints) {
       if (e.method === 'DELETE') expect(e.status).toBe('204')
-      if (e.method === 'POST' && !e.path.endsWith('upload-url')) expect(e.status).toBe('201')
+      if (e.method === 'POST' && !/upload-url|\/auth\//.test(e.path)) expect(e.status).toBe('201')
     }
   })
 })

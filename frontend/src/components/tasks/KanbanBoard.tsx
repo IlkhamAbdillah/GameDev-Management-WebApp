@@ -8,9 +8,10 @@ interface Props {
   visibleStatuses: readonly TaskStatus[]
   onOpen: (task: Task) => void
   onMove: (taskId: string, status: TaskStatus) => void
+  canMove?: (task: Task) => boolean
 }
 
-export default function KanbanBoard({ tasks, visibleStatuses, onOpen, onMove }: Props) {
+export default function KanbanBoard({ tasks, visibleStatuses, onOpen, onMove, canMove = () => true }: Props) {
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
   const columns = TASK_STATUSES.filter((s) => visibleStatuses.includes(s))
 
@@ -31,7 +32,7 @@ export default function KanbanBoard({ tasks, visibleStatuses, onOpen, onMove }: 
               setDragOver(null)
               const id = e.dataTransfer.getData('text/plain')
               const task = tasks.find((t) => t.taskId === id)
-              if (task && task.status !== status) onMove(id, status)
+              if (task && canMove(task) && task.status !== status) onMove(id, status)
             }}
             className={`flex min-h-48 flex-col rounded-2xl border bg-surface p-3 transition-colors ${
               dragOver === status ? 'border-accent' : 'border-line'
@@ -44,7 +45,7 @@ export default function KanbanBoard({ tasks, visibleStatuses, onOpen, onMove }: 
             </header>
             <div className="flex flex-1 flex-col gap-2.5">
               {items.map((task) => (
-                <TaskCard key={task.taskId} task={task} onOpen={onOpen} />
+                <TaskCard key={task.taskId} task={task} onOpen={onOpen} movable={canMove(task)} />
               ))}
               {items.length === 0 && (
                 <p className="m-auto text-xs text-slate-500">No tasks. Drop one here.</p>

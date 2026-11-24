@@ -6,7 +6,8 @@ interface Props {
   folder: Folder
   itemCount: number
   onOpen: (folderId: string) => void
-  onEdit: (folder: Folder) => void
+  /** Omitted when the user may not manage folders. */
+  onEdit?: (folder: Folder) => void
   onDropAsset: (assetId: string, folderId: string) => void
 }
 
@@ -37,9 +38,11 @@ export default function FolderCard({ folder, itemCount, onOpen, onEdit, onDropAs
           <span className="block text-xs text-slate-500">{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
         </span>
       </button>
-      <button onClick={() => onEdit(folder)} aria-label={`Edit folder ${folder.name}`} className="rounded-lg p-1.5 text-slate-500 hover:bg-surface-2 hover:text-slate-200">
-        <Pencil size={15} />
-      </button>
+      {onEdit && (
+        <button onClick={() => onEdit(folder)} aria-label={`Edit folder ${folder.name}`} className="rounded-lg p-1.5 text-slate-500 hover:bg-surface-2 hover:text-slate-200">
+          <Pencil size={15} />
+        </button>
+      )}
     </div>
   )
 }

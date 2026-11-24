@@ -1,3 +1,28 @@
+== Authentication and roles
+PASS  auth API /health -> Lambda + DynamoDB (users), no token needed
+PASS  wrong password -> 401
+PASS  unknown email -> 401
+PASS  project manager can sign in
+PASS  no token -> 401 on tasks, assets, folders and timeline
+PASS  tampered token -> 401
+PASS  GET /auth/me returns the account
+PASS  project manager creates a member -> 201 without hash
+PASS  duplicate email -> 400
+PASS  cannot delete your own account -> 400
+PASS  a project manager cannot be changed to a member -> 400
+PASS  member can sign in
+PASS  member can read tasks, assets, folders and timeline
+PASS  member cannot list or create users -> 403
+PASS  member cannot manage folders -> 403
+PASS  member can edit their own task
+PASS  member cannot edit someone else's task -> 403
+PASS  member cannot set dates or reassign -> 403
+PASS  member cannot delete a task -> 403
+PASS  a task created by a member is assigned to them
+PASS  member can create an asset
+PASS  member cannot delete an asset -> 403
+PASS  deleted account stops being authenticated by /auth/me
+PASS    (its token is rejected by /auth/me -> 401)
 == Connectivity (API Gateway-equivalent entry, Lambda, DynamoDB, S3)
 PASS  asset API /health -> Lambda + DynamoDB (assets, folders) + S3
 PASS  task API /health -> Lambda + DynamoDB (tasks)
@@ -54,12 +79,14 @@ PASS  timeline stats present
 PASS  timeline reflects status/date edits immediately
 PASS  invalid timeline range -> 400
 == CORS
-PASS  asset API CORS preflight
-PASS  task API CORS preflight
+PASS  asset API CORS preflight (allows the Authorization header)
+PASS  task API CORS preflight (allows the Authorization header)
+PASS  auth API CORS preflight (allows the Authorization header)
 == Cleanup
 PASS  all smoke data removed
 == CloudWatch
 PASS  /aws/lambda/GameVaultAssetHandler has fresh execution logs
 PASS  /aws/lambda/GameVaultTaskHandler has fresh execution logs
+PASS  /aws/lambda/GameVaultAuthHandler has fresh execution logs
 
-54/54 checks passed in 57.1s
+80/80 checks passed in 103.0s

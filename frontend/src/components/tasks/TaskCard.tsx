@@ -5,19 +5,21 @@ import { DUE_STYLE, PRIORITY_STYLE, dueState, formatDate } from '../../lib/taskU
 interface Props {
   task: Task
   onOpen: (task: Task) => void
+  /** Whether the signed-in user may change this task (drag to another column). */
+  movable?: boolean
 }
 
-export default function TaskCard({ task, onOpen }: Props) {
+export default function TaskCard({ task, onOpen, movable = true }: Props) {
   const due = dueState(task)
   return (
     <article
-      draggable
+      draggable={movable}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/plain', task.taskId)
         e.dataTransfer.effectAllowed = 'move'
       }}
       onClick={() => onOpen(task)}
-      className="cursor-grab rounded-xl border border-line bg-surface-2 p-3 shadow-sm transition-colors hover:border-accent/50 active:cursor-grabbing"
+      className={`rounded-xl border border-line bg-surface-2 p-3 shadow-sm transition-colors hover:border-accent/50 ${movable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
     >
       <h3 className="text-sm font-medium leading-snug">{task.title}</h3>
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">

@@ -10,7 +10,9 @@ interface ApiFlow {
   probes: [check: string, node: NodeId, action: string][]
 }
 
-export const API_FLOWS: Record<'asset' | 'task', ApiFlow> = {
+export type ApiKey = 'asset' | 'task' | 'auth'
+
+export const API_FLOWS: Record<ApiKey, ApiFlow> = {
   asset: {
     label: 'Asset API',
     url: 'assetUrl',
@@ -27,6 +29,12 @@ export const API_FLOWS: Record<'asset' | 'task', ApiFlow> = {
     lambda: 'taskLambda',
     probes: [['tasksTable', 'tasksTable', 'DescribeTable GameVaultTasks']],
   },
+  auth: {
+    label: 'Auth API',
+    url: 'authUrl',
+    lambda: 'authLambda',
+    probes: [['usersTable', 'usersTable', 'DescribeTable GameVaultUsers']],
+  },
 }
 
 /**
@@ -35,7 +43,7 @@ export const API_FLOWS: Record<'asset' | 'task', ApiFlow> = {
  * The request really is sent when the first hop starts. The Lambda's own steps happen on the server, so they
  * are *replayed* from the per-dependency results and latencies it reports in its answer.
  */
-export async function runHealthFlow(api: 'asset' | 'task', check: () => Promise<HealthResult>, hooks: FlowHooks): Promise<HealthResult> {
+export async function runHealthFlow(api: ApiKey, check: () => Promise<HealthResult>, hooks: FlowHooks): Promise<HealthResult> {
   const flow = API_FLOWS[api]
   hooks.log({ tone: 'info', text: `Browser → ${flow.label}: GET /health` })
   hooks.setNode(flow.url, { state: 'running' })
@@ -94,12 +102,15 @@ export async function runHealthFlow(api: 'asset' | 'task', check: () => Promise<
   return result
 }
 
-/** Runs the Asset and Task health flows one after the other, then infers IAM / CloudWatch. */
-export async function runAllChecks(fetchers: { asset: () => Promise<HealthResult>; task: () => Promise<HealthResult> }, hooks: FlowHooks) {
+export type HealthFetchers = Record<ApiKey, () => Promise<HealthResult>>
+
+/** Runs the Asset, Task and Auth health flows one after the other, then infers IAM / CloudWatch. */
+export async function runAllChecks(fetchers: HealthFetchers, hooks: FlowHooks) {
   const asset = await runHealthFlow('asset', fetchers.asset, hooks)
   const task = await runHealthFlow('task', fetchers.task, hooks)
+  const auth = await runHealthFlow('auth', fetchers.auth, hooks)
 
-  const probes = [...Object.values(asset.checks), ...Object.values(task.checks)]
+  const probes = [asset, task, auth].flatMap((r) => Object.values(r.checks))
   const denied = probes.find((p) => !p.ok && /AccessDenied|403|Expired/i.test(p.error ?? ''))
   if (denied) {
     hooks.setNode('iam', { state: 'failed', error: denied.error, note: 'Inferred: the Lambdas were denied access' })
@@ -108,7 +119,7 @@ export async function runAllChecks(fetchers: { asset: () => Promise<HealthResult
   } else {
     hooks.setNode('iam', { state: 'unknown' })
   }
-  const anyReached = asset.reachable || task.reachable
+  const anyReached = asset.reachable || task.reachable || auth.reachable
   hooks.setNode('cloudwatch', { state: anyReached ? 'inferred' : 'unknown', note: anyReached ? 'Inferred: each invocation writes a log entry (see the Console)' : 'Not testable from the browser' })
-  return { asset, task }
+  return { asset, task, auth }
 }

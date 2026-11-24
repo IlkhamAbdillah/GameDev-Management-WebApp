@@ -1,4 +1,5 @@
 import { assetsApi, putToS3 } from '../api/assets'
+import { authApi } from '../api/auth'
 import { tasksApi, timelineApi } from '../api/tasks'
 import type { Asset, Task, UploadTicket } from '../types'
 import { todayIso } from './dates'
@@ -18,6 +19,7 @@ export interface StepResult {
 export type Leg = [from: NodeId, to: NodeId, label?: string]
 
 export const ROUND_TRIP_STEPS: { id: string; label: string; legs: Leg[] }[] = [
+  { id: 'session', label: 'Check the signed-in session (Lambda verifies the token and reads the user)', legs: [['client', 'authUrl', 'GET /auth/me'], ['authUrl', 'authLambda', 'invoke'], ['authLambda', 'usersTable', 'GetItem']] },
   { id: 'createAsset', label: 'Create a temporary asset (Lambda → DynamoDB write)', legs: [['client', 'assetUrl', 'POST /assets'], ['assetUrl', 'assetLambda', 'invoke'], ['assetLambda', 'assetsTable', 'PutItem']] },
   { id: 'uploadUrl', label: 'Request a pre-signed upload URL (Lambda signs for S3)', legs: [['client', 'assetUrl', 'POST /upload-url'], ['assetUrl', 'assetLambda', 'invoke'], ['assetLambda', 'assetsTable', 'GetItem']] },
   { id: 'putS3', label: 'Upload a tiny file straight from the browser to S3 (CORS + signature)', legs: [['client', 's3', 'PUT (pre-signed)']] },
@@ -90,6 +92,9 @@ export async function runRoundTrip(onUpdate: (steps: StepResult[]) => void, hook
   }
 
   try {
+    await step('session', async () => {
+      await authApi.me()
+    })
     await step('createAsset', async () => {
       asset = await assetsApi.create({ assetName: name, assetType: 'Other', description: 'Temporary asset created by the Connectivity page', assignedTo: '', status: 'Planned', folderId: '' })
     })

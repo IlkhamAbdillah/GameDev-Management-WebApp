@@ -2,7 +2,8 @@
 // Pure data + maths (no React) so layout and routing can be unit-tested.
 
 export type NodeId =
-  | 'client' | 'taskUrl' | 'taskLambda' | 'tasksTable'
+  | 'client' | 'authUrl' | 'authLambda' | 'usersTable'
+  | 'taskUrl' | 'taskLambda' | 'tasksTable'
   | 'assetUrl' | 'assetLambda' | 'assetsTable' | 'foldersTable'
   | 's3' | 'cloudwatch' | 'iam'
 
@@ -29,35 +30,43 @@ export interface EdgeDef {
   kind: 'request' | 'direct' | 'platform'
 }
 
-export const VIEWBOX = { w: 920, h: 560 }
-export const BOUNDARY = { x: 205, y: 20, w: 685, h: 520 } // the AWS account / region
+export const VIEWBOX = { w: 920, h: 670 }
+export const BOUNDARY = { x: 205, y: 20, w: 685, h: 630 } // the AWS account / region
 
 export const NODES: NodeDef[] = [
-  { id: 'client', x: 20, y: 180, w: 150, h: 72, title: 'Browser', subtitle: 'React app (this page)', kind: 'client' },
-  { id: 'taskUrl', x: 230, y: 60, w: 150, h: 64, title: 'Function URL', subtitle: 'Task API · HTTPS', kind: 'entry' },
-  { id: 'taskLambda', x: 450, y: 60, w: 150, h: 64, title: 'Lambda', subtitle: 'GameVaultTaskHandler', kind: 'compute' },
-  { id: 'tasksTable', x: 700, y: 60, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultTasks', kind: 'data' },
-  { id: 'iam', x: 450, y: 172, w: 150, h: 64, title: 'IAM role', subtitle: 'LabRole', kind: 'platform' },
-  { id: 'cloudwatch', x: 700, y: 172, w: 170, h: 64, title: 'CloudWatch Logs', subtitle: '/aws/lambda/GameVault…', kind: 'platform' },
-  { id: 'assetUrl', x: 230, y: 300, w: 150, h: 64, title: 'Function URL', subtitle: 'Asset API · HTTPS', kind: 'entry' },
-  { id: 'assetLambda', x: 450, y: 300, w: 150, h: 64, title: 'Lambda', subtitle: 'GameVaultAssetHandler', kind: 'compute' },
-  { id: 'assetsTable', x: 700, y: 290, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultAssets', kind: 'data' },
-  { id: 'foldersTable', x: 700, y: 380, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultFolders', kind: 'data' },
-  { id: 's3', x: 450, y: 450, w: 150, h: 64, title: 'Amazon S3', subtitle: 'private asset bucket', kind: 'storage' },
+  { id: 'client', x: 20, y: 300, w: 150, h: 72, title: 'Browser', subtitle: 'React app (this page)', kind: 'client' },
+  { id: 'authUrl', x: 230, y: 60, w: 150, h: 64, title: 'Function URL', subtitle: 'Auth API · HTTPS', kind: 'entry' },
+  { id: 'authLambda', x: 450, y: 60, w: 150, h: 64, title: 'Lambda', subtitle: 'GameVaultAuthHandler', kind: 'compute' },
+  { id: 'usersTable', x: 700, y: 60, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultUsers', kind: 'data' },
+  { id: 'taskUrl', x: 230, y: 170, w: 150, h: 64, title: 'Function URL', subtitle: 'Task API · HTTPS', kind: 'entry' },
+  { id: 'taskLambda', x: 450, y: 170, w: 150, h: 64, title: 'Lambda', subtitle: 'GameVaultTaskHandler', kind: 'compute' },
+  { id: 'tasksTable', x: 700, y: 170, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultTasks', kind: 'data' },
+  { id: 'iam', x: 450, y: 282, w: 150, h: 64, title: 'IAM role', subtitle: 'LabRole', kind: 'platform' },
+  { id: 'cloudwatch', x: 700, y: 282, w: 170, h: 64, title: 'CloudWatch Logs', subtitle: '/aws/lambda/GameVault…', kind: 'platform' },
+  { id: 'assetUrl', x: 230, y: 410, w: 150, h: 64, title: 'Function URL', subtitle: 'Asset API · HTTPS', kind: 'entry' },
+  { id: 'assetLambda', x: 450, y: 410, w: 150, h: 64, title: 'Lambda', subtitle: 'GameVaultAssetHandler', kind: 'compute' },
+  { id: 'assetsTable', x: 700, y: 400, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultAssets', kind: 'data' },
+  { id: 'foldersTable', x: 700, y: 490, w: 170, h: 64, title: 'DynamoDB', subtitle: 'GameVaultFolders', kind: 'data' },
+  { id: 's3', x: 450, y: 560, w: 150, h: 64, title: 'Amazon S3', subtitle: 'private asset bucket', kind: 'storage' },
 ]
 
 export const EDGES: EdgeDef[] = [
+  { id: 'client-authUrl', a: 'client', aSide: 'r', b: 'authUrl', bSide: 'l', kind: 'request' },
   { id: 'client-taskUrl', a: 'client', aSide: 'r', b: 'taskUrl', bSide: 'l', kind: 'request' },
   { id: 'client-assetUrl', a: 'client', aSide: 'r', b: 'assetUrl', bSide: 'l', kind: 'request' },
+  { id: 'authUrl-authLambda', a: 'authUrl', aSide: 'r', b: 'authLambda', bSide: 'l', kind: 'request' },
   { id: 'taskUrl-taskLambda', a: 'taskUrl', aSide: 'r', b: 'taskLambda', bSide: 'l', kind: 'request' },
   { id: 'assetUrl-assetLambda', a: 'assetUrl', aSide: 'r', b: 'assetLambda', bSide: 'l', kind: 'request' },
+  { id: 'authLambda-usersTable', a: 'authLambda', aSide: 'r', b: 'usersTable', bSide: 'l', kind: 'request' },
   { id: 'taskLambda-tasksTable', a: 'taskLambda', aSide: 'r', b: 'tasksTable', bSide: 'l', kind: 'request' },
   { id: 'assetLambda-assetsTable', a: 'assetLambda', aSide: 'r', b: 'assetsTable', bSide: 'l', kind: 'request' },
   { id: 'assetLambda-foldersTable', a: 'assetLambda', aSide: 'r', b: 'foldersTable', bSide: 'l', kind: 'request' },
   { id: 'assetLambda-s3', a: 'assetLambda', aSide: 'b', b: 's3', bSide: 't', kind: 'request' },
   { id: 'client-s3', a: 'client', aSide: 'b', b: 's3', bSide: 'l', kind: 'direct' },
+  { id: 'authLambda-iam', a: 'authLambda', aSide: 'r', b: 'iam', bSide: 'r', kind: 'platform' },
   { id: 'taskLambda-iam', a: 'taskLambda', aSide: 'b', b: 'iam', bSide: 't', kind: 'platform' },
   { id: 'assetLambda-iam', a: 'assetLambda', aSide: 't', b: 'iam', bSide: 'b', kind: 'platform' },
+  { id: 'authLambda-cloudwatch', a: 'authLambda', aSide: 'r', b: 'cloudwatch', bSide: 'l', kind: 'platform' },
   { id: 'taskLambda-cloudwatch', a: 'taskLambda', aSide: 'r', b: 'cloudwatch', bSide: 'l', kind: 'platform' },
   { id: 'assetLambda-cloudwatch', a: 'assetLambda', aSide: 'r', b: 'cloudwatch', bSide: 'l', kind: 'platform' },
 ]

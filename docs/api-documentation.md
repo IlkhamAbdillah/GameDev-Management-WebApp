@@ -1,6 +1,6 @@
 # API Documentation
 
-Base URLs: one Lambda Function URL per module, from `.aws/outputs.json` (`assetApiUrl` for `/assets`, `taskApiUrl` for `/tasks`). All bodies are JSON.
+Base URLs: one Lambda Function URL per module, from `.aws/outputs.json` (`assetApiUrl` for `/assets` and `/folders`, `taskApiUrl` for `/tasks` and `/timeline`, `authApiUrl` for `/auth` and `/users`). All bodies are JSON. **Every route except `GET /health` and `POST /auth/login` needs `Authorization: Bearer <token>`** (see Authentication below).
 
 Success: `{"success": true, "data": ...}` · Error: `{"success": false, "message": "..."}`
 
@@ -19,7 +19,7 @@ Success: `{"success": true, "data": ...}` · Error: `{"success": false, "message
   "assetsTable": {"ok": true, "ms": 166}, "foldersTable": {"ok": true, "ms": 104}, "bucket": {"ok": true, "ms": 100}}}}
 ```
 
-Errors: `400` invalid payload, `404` asset/route not found, `500` generic internal error (details only in CloudWatch).
+Errors: `400` invalid payload, `401` missing/invalid/expired token, `403` the role may not do this, `404` asset/route not found, `500` generic internal error (details only in CloudWatch).
 
 ## Asset fields
 | Field | Rules |
@@ -35,7 +35,7 @@ Errors: `400` invalid payload, `404` asset/route not found, `500` generic intern
 
 ## Example
 ```bash
-curl -X POST $URL/assets -H 'content-type: application/json' \
+curl -X POST $URL/assets -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" \
   -d '{"assetName":"Main Character","assetType":"Character","assignedTo":"Rina"}'
 ```
 Real captured output: `docs/evidence/api-test-output.txt`.
@@ -127,3 +127,36 @@ Rules (server-enforced):
 Computed fields on every asset response (not stored, URLs valid ~15 min): `fileName`, `downloadUrl` (forces download), `previewUrl` and `previewKind` (`"image"` for png/jpg/jpeg/webp, `"audio"` for wav/mp3/ogg, `"model"` for `.glb`, otherwise empty: fbx/obj/gltf/other files are download-only), and `folderId`.
 
 Real captured run against S3: `docs/evidence/asset-files-test-output.txt`.
+
+## Authentication (Phase 6) — `authApiUrl`
+Roles are global: `project_manager` and `member`. Function URLs have no authorizer, so each Lambda verifies the HS256 JWT itself (`backend/shared/auth.py`; secret in the `JWT_SECRET` env var, token lifetime 8 h, `TOKEN_TTL_SECONDS`). Passwords are stored as scrypt hashes and never returned. `401` = no/invalid/expired token (or wrong login: the same message for a wrong password and an unknown email); `403` = signed in but not allowed.
+
+| Method | Path | Who | Description | Success |
+|---|---|---|---|---|
+| GET | `/health` | public | Users table health | 200 / 503 |
+| POST | `/auth/login` | public | `{email, password}` → `{token, expiresAt, user}` | 200 |
+| GET | `/auth/me` | any | Current account (401 if it was deleted) | 200 |
+| POST | `/auth/password` | any | `{currentPassword, newPassword}` (8–128 chars) | 204 |
+| GET | `/users` | manager | All accounts | 200 |
+| POST | `/users` | manager | `{name, email, password, role}`; email unique, case-insensitive | 201 |
+| PUT | `/users/{userId}` | manager | `name`, `role`, `password` (reset). Email cannot change. A manager cannot be changed to a member (the role is permanent; members can be promoted) | 200 |
+| DELETE | `/users/{userId}` | manager | Not your own account | 204 |
+
+```bash
+TOKEN=$(curl -s -X POST $AUTH_URL/auth/login -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","password":"…"}' | python3 -c 'import json,sys;print(json.load(sys.stdin)["data"]["token"])')
+```
+
+### Who may do what
+| Action | Project manager | Member |
+|---|---|---|
+| Read tasks, timeline, assets, folders | yes | yes |
+| Create a task | yes (any fields) | yes, without dates/assignee; it is assigned to them automatically |
+| Update a task | any task, any field | only tasks with their own `assigneeId`; title, description, category, priority, status only (dates/assignee fields → 403) |
+| Delete a task | yes | 403 |
+| Create/update an asset, request an upload URL, upload | yes | yes |
+| Delete an asset or its file | yes | 403 |
+| Create/rename/move/delete folders | yes | 403 |
+| Manage accounts | yes | 403 |
+
+Tasks carry `assigneeId` (a user id) next to the display name `assignee`. Setting `assignee` without `assigneeId` on update clears the link (a free-text assignee is not an account). A missing task is `404` before any `403`.

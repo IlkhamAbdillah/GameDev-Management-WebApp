@@ -1,8 +1,8 @@
 import type { ConnectivityState } from './connectivityStore'
 import type { NodeId } from './flowModel'
 
-// The six things the health checks prove.
-export const CHECK_NODES: NodeId[] = ['assetUrl', 'assetsTable', 'foldersTable', 's3', 'taskUrl', 'tasksTable']
+// The eight things the health checks prove.
+export const CHECK_NODES: NodeId[] = ['assetUrl', 'assetsTable', 'foldersTable', 's3', 'taskUrl', 'tasksTable', 'authUrl', 'usersTable']
 
 export type BarTone = 'neutral' | 'running' | 'ok' | 'fail' | 'warn'
 

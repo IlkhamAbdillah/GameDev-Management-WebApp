@@ -8,6 +8,7 @@ import AssetModal from '../components/assets/AssetModal'
 import FolderCard, { ASSET_DRAG_TYPE } from '../components/assets/FolderCard'
 import FolderModal from '../components/assets/FolderModal'
 import PageHeader from '../components/PageHeader'
+import { useAuth } from '../lib/authContext'
 import { folderChain, folderPath } from '../lib/folders'
 import { ASSET_STATUSES, ASSET_TYPES, type Asset, type Folder } from '../types'
 
@@ -15,6 +16,7 @@ const select = 'rounded-lg border border-line bg-surface px-3 py-2 text-sm outli
 const byName = (a: Folder, b: Folder) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 
 export default function AssetsPage() {
+  const { isManager } = useAuth() // folders are managed by project managers; members add and edit assets
   const [params, setParams] = useSearchParams()
   const [assets, setAssets] = useState<Asset[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
@@ -119,9 +121,11 @@ export default function AssetsPage() {
             <button onClick={() => void load()} aria-label="Refresh" className="rounded-lg border border-line bg-surface p-2 text-slate-300 hover:bg-surface-2">
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button onClick={() => setFolderModal({ folder: null })} className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-slate-200 hover:bg-surface-2">
-              <FolderPlus size={16} /> New folder
-            </button>
+            {isManager && (
+              <button onClick={() => setFolderModal({ folder: null })} className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-slate-200 hover:bg-surface-2">
+                <FolderPlus size={16} /> New folder
+              </button>
+            )}
             <button onClick={() => setModal({ asset: null })} className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:brightness-110">
               <Plus size={16} /> New asset
             </button>
@@ -176,7 +180,7 @@ export default function AssetsPage() {
           {!searching && subfolders.length > 0 && (
             <section aria-label="Folders" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {subfolders.map((f) => (
-                <FolderCard key={f.folderId} folder={f} itemCount={itemCount(f.folderId)} onOpen={openFolder} onEdit={(folder) => setFolderModal({ folder })} onDropAsset={(id, to) => void moveAsset(id, to)} />
+                <FolderCard key={f.folderId} folder={f} itemCount={itemCount(f.folderId)} onOpen={openFolder} onEdit={isManager ? (folder) => setFolderModal({ folder }) : undefined} onDropAsset={(id, to) => void moveAsset(id, to)} />
               ))}
             </section>
           )}
@@ -194,7 +198,7 @@ export default function AssetsPage() {
           )}
           {nothingHere && (
             <div className="rounded-2xl border border-dashed border-line py-16 text-center text-sm text-slate-400">
-              {currentId ? 'This folder is empty. Create a subfolder or add an asset.' : 'No assets yet. Create a folder or the first asset.'}
+              {currentId ? (isManager ? 'This folder is empty. Create a subfolder or add an asset.' : 'This folder is empty.') : isManager ? 'No assets yet. Create a folder or the first asset.' : 'No assets yet. Add the first asset.'}
             </div>
           )}
         </>

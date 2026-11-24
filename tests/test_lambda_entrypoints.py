@@ -12,6 +12,8 @@ import pytest
 from moto import mock_aws
 
 ROOT = Path(__file__).resolve().parents[1] / "backend"
+sys.path.insert(0, str(ROOT / "shared"))
+from auth import issue_token  # noqa: E402
 REGION = "us-east-1"
 BUCKET = "gamevault-entrypoint-bucket"
 MODULES = ("handler", "database", "validation", "storage", "timeline", "folders", "filetypes")
@@ -22,10 +24,12 @@ def fresh_handler(directory):
     for name in MODULES:
         sys.modules.pop(name, None)
     sys.path.insert(0, str(ROOT / directory))
+    sys.path.insert(0, str(ROOT / "shared"))
     try:
         return importlib.import_module("handler")
     finally:
         sys.path.remove(str(ROOT / directory))
+        sys.path.remove(str(ROOT / "shared"))
         for name in MODULES:
             sys.modules.pop(name, None)
 
@@ -39,8 +43,14 @@ def make_table(name, key):
     )
 
 
-def event(method, path, body=None, query=None):
+SECRET = "entrypoint-secret-0123456789-0123456789"
+
+
+def event(method, path, body=None, query=None, token=None):
+    if token is None:  # default: a signed-in project manager
+        token = issue_token("manager-1", "project_manager", "Pat", SECRET)[0]
     return {
+        "headers": {"authorization": f"Bearer {token}"} if token else {},
         "rawPath": path,
         "requestContext": {"http": {"method": method}},
         "queryStringParameters": query,
@@ -58,6 +68,8 @@ def aws_env(monkeypatch):
         "FOLDERS_TABLE": "GameVaultFolders",
         "TASKS_TABLE": "GameVaultTasks",
         "ASSET_BUCKET": BUCKET,
+        "USERS_TABLE": "GameVaultUsers",
+        "JWT_SECRET": SECRET,
     }.items():
         monkeypatch.setenv(key, value)
 
@@ -106,3 +118,32 @@ def test_lambda_returns_json_error_for_unknown_route():
         response = fresh_handler("task-handler").lambda_handler(event("GET", "/nope"), None)
         assert response["statusCode"] == 404 and response["headers"]["Content-Type"] == "application/json"
         assert json.loads(response["body"]) == {"success": False, "message": "Route not found"}
+
+
+def test_requests_without_a_valid_token_are_rejected_but_health_is_public():
+    with mock_aws():
+        make_table("GameVaultTasks", "taskId")
+        lambda_handler = fresh_handler("task-handler").lambda_handler
+        assert lambda_handler(event("GET", "/health", token=""), None)["statusCode"] == 200
+        assert lambda_handler(event("GET", "/tasks", token=""), None)["statusCode"] == 401
+        assert lambda_handler(event("GET", "/tasks", token="not.a.jwt"), None)["statusCode"] == 401
+
+
+def test_auth_lambda_entrypoint_login_flow():
+    with mock_aws():
+        make_table("GameVaultUsers", "userId")
+        lambda_handler = fresh_handler("auth-handler").lambda_handler
+        assert lambda_handler(event("GET", "/health", token=""), None)["statusCode"] == 200
+
+        created = lambda_handler(
+            event("POST", "/users", {"name": "Pat", "email": "pat@example.com", "password": "correct horse", "role": "project_manager"}),
+            None,
+        )
+        assert created["statusCode"] == 201 and "passwordHash" not in created["body"]
+
+        login = lambda_handler(
+            event("POST", "/auth/login", {"email": "pat@example.com", "password": "correct horse"}, token=""), None
+        )
+        token = json.loads(login["body"])["data"]["token"]
+        me = lambda_handler(event("GET", "/auth/me", token=token), None)
+        assert me["statusCode"] == 200 and json.loads(me["body"])["data"]["email"] == "pat@example.com"

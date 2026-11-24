@@ -3,15 +3,16 @@
 ## Layers
 | Layer | Where | What it proves | Run |
 |---|---|---|---|
-| Backend unit/integration (pytest + moto) | `tests/` — 105 tests | Business logic, validation, routing, error handling, S3 key/URL rules, folder tree rules, timeline maths, and the real `lambda_handler` wiring (env vars → DynamoDB/S3 clients) against mocked AWS | `.venv/bin/python -m pytest tests -q` |
-| Frontend unit (Vitest) | `frontend/src/**/*.test.ts` — 68 tests | Date helpers, deadline highlighting, folder tree helpers, file validation/preview rules, API client envelope/error handling, the health client, the API reference data, the diagram layout (no overlapping nodes, every animated hop follows a real edge), the Connectivity health-flow and round-trip orchestrators (hop order, failing/degraded/unreachable paths, skipping after a failure, cleanup), the status bar states, and the quiet background refresh (no flicker, shared request, staleness) | `cd frontend && npm test` |
+| Backend unit/integration (pytest + moto) | `tests/` — 165 tests | Business logic, validation, routing, authentication (password hashing, token signing/expiry/tampering, `alg: none`), role rules per route (401/403, members only edit their own tasks), error handling, S3 key/URL rules, folder tree rules, timeline maths, and the real `lambda_handler` wiring (env vars → DynamoDB/S3 clients) against mocked AWS | `.venv/bin/python -m pytest tests -q` |
+| Frontend unit (Vitest) | `frontend/src/**/*.test.ts` — 76 tests | Permissions, bearer-token handling and sign-out on 401, date helpers, deadline highlighting, folder tree helpers, file validation/preview rules, API client envelope/error handling, the health client, the API reference data, the diagram layout (no overlapping nodes, every animated hop follows a real edge), the Connectivity health-flow (Asset, Task, Auth) and round-trip orchestrators (hop order, failing/degraded/unreachable paths, skipping after a failure, cleanup), the status bar states, and the quiet background refresh (no flicker, shared request, staleness) | `cd frontend && npm test` |
 | Frontend static | `npm run build` (`tsc` strict) + `npm run lint` | Type safety across the app | `cd frontend && npm run build` |
-| **Live AWS smoke test** | `scripts/smoke_test.py` — 54 checks | The deployed stack: Function URLs → Lambda → DynamoDB/S3, real pre-signed upload/download, S3 permissions, CORS, CloudWatch logs. Cleans up after itself | see below |
+| **Live AWS smoke test** | `scripts/smoke_test.py` — 80 checks | The deployed stack: sign-in and role rules against the real Lambdas (throw-away project manager written to the Users table, a member created through the API), Function URLs → Lambda → DynamoDB/S3, real pre-signed upload/download, S3 permissions, CORS (including the `Authorization` header), CloudWatch logs. Cleans up after itself | see below |
 | REST client | `postman/gamevault.postman_collection.json` — 41 requests with assertions | Same flows for manual runs in Postman / Collection Runner | import, set `assetApi` and `taskApi` |
 | CI | `.github/workflows/ci.yml` | Backend tests + frontend tests/build on every push | automatic |
 
 ```bash
 export AWS_SHARED_CREDENTIALS_FILE=$PWD/.aws/credentials AWS_CONFIG_FILE=$PWD/.aws/config
+# the smoke test writes its temporary project manager with the awsstudent profile (override: GV_DB_PROFILE)
 .venv/bin/python scripts/smoke_test.py | tee docs/evidence/smoke-test-output.txt
 ```
 Output is saved to `docs/evidence/smoke-test-output.txt` by the command above. It needs a running Learner Lab session: when the session ends, the lab role is denied all data access and every check fails with `AccessDeniedException` (the Connectivity page shows the same thing).

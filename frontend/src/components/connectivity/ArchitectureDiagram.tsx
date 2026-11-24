@@ -136,7 +136,7 @@ export default function ArchitectureDiagram({ statuses, selected, onSelect, cont
           />
         )
       })}
-      <text x="225" y="518" fontSize="10" fill="#8a78d0">direct upload / download (pre-signed URL)</text>
+      <text x="225" y="628" fontSize="10" fill="#8a78d0">direct upload / download (pre-signed URL)</text>
 
       {NODES.map((node) => (
         <NodeBox key={node.id} node={node} status={statuses[node.id]} selected={selected === node.id} onSelect={onSelect} />

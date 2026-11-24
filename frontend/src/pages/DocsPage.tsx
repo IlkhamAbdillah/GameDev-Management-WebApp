@@ -151,7 +151,7 @@ export default function DocsPage() {
 
           <Section id="api" title="API reference">
             <div className="space-y-2 text-sm text-slate-300">
-              <p>There are two APIs, each a Lambda Function URL (configured with <code>{API_NAMES.asset.env}</code> and <code>{API_NAMES.task.env}</code>). All bodies are JSON. Click an endpoint for details.</p>
+              <p>There are three APIs, each a Lambda Function URL (configured with <code>{API_NAMES.asset.env}</code>, <code>{API_NAMES.task.env}</code> and <code>{API_NAMES.auth.env}</code>). All bodies are JSON. Everything except <code>/health</code> and <code>/auth/login</code> needs a bearer token. Click an endpoint for details.</p>
               <div className="grid gap-3 md:grid-cols-2">
                 <div><div className="mb-1 text-xs font-medium text-slate-400">Success</div><Code>{RESPONSE_FORMAT.success}</Code></div>
                 <div><div className="mb-1 text-xs font-medium text-slate-400">Error</div><Code>{RESPONSE_FORMAT.error}</Code></div>
@@ -174,6 +174,7 @@ export default function DocsPage() {
           <Section id="security" title="Security & limitations">
             <ul className="list-disc space-y-1.5 pl-5 text-sm text-slate-300">
               <li>The S3 bucket is private (Block Public Access, encryption at rest). Access is only through pre-signed URLs, with the file type, content type and size signed in.</li>
+              <li>Sign-in uses scrypt-hashed passwords and signed JWTs verified inside every Lambda (Function URLs have no authorizer). Two roles: project managers can do everything; members can read, add and edit assets, and edit only the tasks assigned to them.</li>
               <li>No credentials in the frontend or in the repository. Lambdas use an IAM role; configuration comes from environment variables.</li>
               <li>Every payload is validated and only whitelisted fields are stored. Writes are conditional, so updating or deleting a missing record never creates or removes anything else.</li>
               <li>File names are sanitised, an asset can only reference files under its own S3 prefix, and deleting an asset deletes only that prefix.</li>
@@ -182,8 +183,8 @@ export default function DocsPage() {
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
               <div className="font-medium">Known limitations (academic MVP)</div>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
-                <li><strong>No authentication:</strong> the Function URLs are public, so anyone with a URL can use the API. CORS allows any origin.</li>
-                <li>Both Lambdas share the Learner Lab role (<code>LabRole</code>) instead of separate least-privilege roles.</li>
+                <li><strong>Tokens are stateless:</strong> a deleted account or a changed role takes full effect when its token expires (8 hours). There is no login rate limiting, and CORS allows any origin (the bearer token is not a cookie).</li>
+                <li>All three Lambdas share the Learner Lab role (<code>LabRole</code>) instead of separate least-privilege roles.</li>
                 <li>List endpoints use DynamoDB <code>Scan</code> and filter in the Lambda, which is fine for small datasets only.</li>
               </ul>
             </div>

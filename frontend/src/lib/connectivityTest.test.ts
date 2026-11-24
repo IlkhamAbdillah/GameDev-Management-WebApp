@@ -7,12 +7,14 @@ const assets = vi.hoisted(() => ({
   remove: vi.fn(),
   putToS3: vi.fn(),
 }))
+const auth = vi.hoisted(() => ({ me: vi.fn() }))
 const tasks = vi.hoisted(() => ({ create: vi.fn(), remove: vi.fn(), timeline: vi.fn() }))
 
 vi.mock('../api/assets', () => ({
   assetsApi: { create: assets.create, createUpload: assets.createUpload, update: assets.update, remove: assets.remove },
   putToS3: assets.putToS3,
 }))
+vi.mock('../api/auth', () => ({ authApi: { me: auth.me } }))
 vi.mock('../api/tasks', () => ({
   tasksApi: { create: tasks.create, remove: tasks.remove },
   timelineApi: { get: tasks.timeline },
@@ -24,6 +26,7 @@ import type { FlowHooks, NodeId, NodeStatus } from './flowModel'
 const PROBE = 'gamevault-connectivity-probe'
 
 function happyPath() {
+  auth.me.mockResolvedValue({ userId: 'u1' })
   assets.create.mockResolvedValue({ assetId: 'a1' })
   assets.createUpload.mockResolvedValue({ s3Key: 'assets/a1/x-probe.json', uploadUrl: 'u', method: 'PUT', headers: {}, expiresIn: 300 })
   assets.putToS3.mockResolvedValue(undefined)
@@ -103,8 +106,11 @@ describe('runRoundTrip', () => {
     it('animates each step out along its route and back along the same route in reverse', async () => {
       const r = recorder()
       await runRoundTrip(() => {}, r.hooks)
-      // first step: create asset -> browser, URL, Lambda, table, then the answer retraces it
-      expect(r.hops.slice(0, 6)).toEqual(['client>assetUrl', 'assetUrl>assetLambda', 'assetLambda>assetsTable', 'assetsTable>assetLambda:ok', 'assetLambda>assetUrl:ok', 'assetUrl>client:ok'])
+      // first step: the session check goes through the Auth API; the answer retraces the route in reverse
+      expect(r.hops.slice(0, 6)).toEqual(['client>authUrl', 'authUrl>authLambda', 'authLambda>usersTable', 'usersTable>authLambda:ok', 'authLambda>authUrl:ok', 'authUrl>client:ok'])
+      expect(r.nodes.usersTable?.state).toBe('ok')
+      // second step: create asset -> browser, URL, Lambda, table, then the answer retraces it
+      expect(r.hops.slice(6, 12)).toEqual(['client>assetUrl', 'assetUrl>assetLambda', 'assetLambda>assetsTable', 'assetsTable>assetLambda:ok', 'assetLambda>assetUrl:ok', 'assetUrl>client:ok'])
       expect(r.hops).toContain('client>s3') // the direct browser -> S3 upload bypasses Lambda
       expect(r.hops).toContain('s3>client:ok')
       expect(r.nodes.s3?.state).toBe('ok')

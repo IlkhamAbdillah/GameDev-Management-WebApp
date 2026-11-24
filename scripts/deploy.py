@@ -9,6 +9,8 @@ Requires Learner Lab session credentials (role voclabs): LabRole is passed to La
 """
 import io
 import json
+import os
+import secrets
 import sys
 import time
 import zipfile
@@ -19,9 +21,25 @@ from botocore.exceptions import ClientError
 
 REGION = "us-east-1"
 ROOT = Path(__file__).resolve().parents[1]
-TABLES = {"GameVaultAssets": "assetId", "GameVaultFolders": "folderId", "GameVaultTasks": "taskId"}
+TABLES = {"GameVaultAssets": "assetId", "GameVaultFolders": "folderId", "GameVaultTasks": "taskId", "GameVaultUsers": "userId"}
 ROLE_NAME = "LabRole"  # Learner Lab: IAM role creation is not available
 OUTPUT = ROOT / ".aws" / "outputs.json"
+SHARED_DIR = ROOT / "backend" / "shared"  # auth.py is bundled into every Lambda zip
+JWT_SECRET_FILE = ROOT / ".aws" / "jwt-secret"  # git-ignored; reused so redeploys keep tokens valid
+
+
+def jwt_secret():
+    """JWT signing key: GV_JWT_SECRET, else the persisted file, else a new random one (never printed)."""
+    if os.environ.get("GV_JWT_SECRET"):
+        return os.environ["GV_JWT_SECRET"]
+    if JWT_SECRET_FILE.exists():
+        return JWT_SECRET_FILE.read_text().strip()
+    JWT_SECRET_FILE.parent.mkdir(exist_ok=True)
+    JWT_SECRET_FILE.write_text(secrets.token_urlsafe(48))
+    JWT_SECRET_FILE.chmod(0o600)
+    print(f"generated a new JWT secret in {JWT_SECRET_FILE.relative_to(ROOT)}")
+    return JWT_SECRET_FILE.read_text().strip()
+
 
 session = boto3.Session(region_name=REGION)
 account = session.client("sts").get_caller_identity()["Account"]
@@ -31,6 +49,11 @@ FUNCTIONS = {
         "name": "GameVaultAssetHandler",
         "dir": ROOT / "backend" / "asset-handler",
         "env": {"ASSETS_TABLE": "GameVaultAssets", "FOLDERS_TABLE": "GameVaultFolders", "ASSET_BUCKET": BUCKET},
+    },
+    "auth": {
+        "name": "GameVaultAuthHandler",
+        "dir": ROOT / "backend" / "auth-handler",
+        "env": {"USERS_TABLE": "GameVaultUsers"},
     },
     "task": {
         "name": "GameVaultTaskHandler",
@@ -106,7 +129,7 @@ def ensure_bucket():
 def build_zip(handler_dir):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(handler_dir.glob("*.py")):
+        for path in sorted([*handler_dir.glob("*.py"), *SHARED_DIR.glob("*.py")]):
             archive.write(path, path.name)
     return buffer.getvalue()
 
@@ -115,7 +138,7 @@ def ensure_function(spec):
     name = spec["name"]
     role_arn = iam.get_role(RoleName=ROLE_NAME)["Role"]["Arn"]
     code = build_zip(spec["dir"])
-    env = {"Variables": spec["env"]}
+    env = {"Variables": {**spec["env"], "JWT_SECRET": jwt_secret()}}
     try:
         lam.get_function(FunctionName=name)
         lam.update_function_code(FunctionName=name, ZipFile=code)
@@ -143,7 +166,7 @@ def ensure_function_url(name):
     cors = {
         "AllowOrigins": ["*"],
         "AllowMethods": ["GET", "POST", "PUT", "DELETE"],
-        "AllowHeaders": ["content-type"],
+        "AllowHeaders": ["content-type", "authorization"],  # bearer token, no cookies -> * origin is safe
         "MaxAge": 3600,
     }
     try:

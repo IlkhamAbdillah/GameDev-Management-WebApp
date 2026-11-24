@@ -8,17 +8,21 @@ import boto3
 import pytest
 from moto import mock_aws
 
-HANDLER_DIR = str(Path(__file__).resolve().parents[1] / "backend" / "task-handler")
+BACKEND = Path(__file__).resolve().parents[1] / "backend"
+HANDLER_DIR = str(BACKEND / "task-handler")
+SHARED_DIR = str(BACKEND / "shared")
 
 # Both Lambdas use the module names handler/database/validation; load the task versions
 # in isolation so they do not collide with the asset-handler modules.
 for _name in ("handler", "database", "validation", "storage", "timeline"):
     sys.modules.pop(_name, None)
+sys.path.insert(0, SHARED_DIR)
 sys.path.insert(0, HANDLER_DIR)
 handler = importlib.import_module("handler")
 TaskRepository = importlib.import_module("database").TaskRepository
 validation = importlib.import_module("validation")
 sys.path.remove(HANDLER_DIR)
+auth = importlib.import_module("auth")
 for _name in ("handler", "database", "validation", "timeline"):
     sys.modules.pop(_name, None)
 
@@ -47,14 +51,26 @@ def repo():
 TODAY = date(2026, 11, 24)
 
 
-def call(repo, method, path, body=None, query=None):
+SECRET = "test-secret-0123456789-0123456789-abcdef"
+MANAGER = ("manager-1", auth.PROJECT_MANAGER, "Pat Manager")
+ALICE = ("member-alice", auth.MEMBER, "Alice")
+BOB = ("member-bob", auth.MEMBER, "Bob")
+
+
+def bearer(user):
+    token, _ = auth.issue_token(user[0], user[1], user[2], SECRET)
+    return {"authorization": f"Bearer {token}"}
+
+
+def call(repo, method, path, body=None, query=None, user=MANAGER, headers=None):
     event = {
         "rawPath": path,
         "requestContext": {"http": {"method": method}},
         "queryStringParameters": query,
+        "headers": bearer(user) if headers is None else headers,
         "body": json.dumps(body) if body is not None else None,
     }
-    res = handler.handle(event, repo, today=TODAY)
+    res = handler.handle(event, repo, SECRET, today=TODAY)
     return res["statusCode"], json.loads(res["body"]) if "body" in res else None
 
 
@@ -165,8 +181,9 @@ def test_update_rejects_invalid_and_empty(repo):
 # ---- delete / misc ----
 def test_delete_task(repo):
     task = create(repo)
-    event = {"rawPath": f"/tasks/{task['taskId']}", "requestContext": {"http": {"method": "DELETE"}}}
-    res = handler.handle(event, repo)
+    event = {"rawPath": f"/tasks/{task['taskId']}", "requestContext": {"http": {"method": "DELETE"}},
+             "headers": bearer(MANAGER)}
+    res = handler.handle(event, repo, SECRET)
     assert res["statusCode"] == 204 and "body" not in res
     assert call(repo, "GET", f"/tasks/{task['taskId']}")[0] == 404
     assert call(repo, "DELETE", "/tasks/ghost")[0] == 404
@@ -181,8 +198,8 @@ def test_health_unknown_route_and_hidden_errors(repo):
         def list(self, **_):
             raise RuntimeError("secret internals")
 
-    event = {"rawPath": "/tasks", "requestContext": {"http": {"method": "GET"}}}
-    res = handler.handle(event, Broken())
+    event = {"rawPath": "/tasks", "requestContext": {"http": {"method": "GET"}}, "headers": bearer(MANAGER)}
+    res = handler.handle(event, Broken(), SECRET)
     assert res["statusCode"] == 500 and "secret" not in res["body"]
 
 
@@ -292,6 +309,89 @@ def test_health_returns_503_when_the_table_is_unreachable(repo):
             raise RuntimeError("boom")
 
     event = {"rawPath": "/health", "requestContext": {"http": {"method": "GET"}}}
-    res = handler.handle(event, Down())
+    res = handler.handle(event, Down(), SECRET)
     body = json.loads(res["body"])
     assert res["statusCode"] == 503 and body["data"]["checks"]["tasksTable"]["error"] == "RuntimeError"
+
+
+# ---- authentication & roles ----
+def test_requests_need_a_valid_token(repo):
+    assert call(repo, "GET", "/tasks", headers={})[0] == 401
+    assert call(repo, "GET", "/timeline", headers={})[0] == 401
+    assert call(repo, "GET", "/tasks", headers={"authorization": "Bearer abc.def.ghi"})[0] == 401
+    tampered = bearer(ALICE)["authorization"] + "x"
+    assert call(repo, "GET", "/tasks", headers={"authorization": tampered})[0] == 401
+    assert call(repo, "POST", "/tasks", {"title": "x"}, headers={})[0] == 401
+    status, body = call(repo, "GET", "/tasks", headers={})
+    assert body == {"success": False, "message": "Authentication required"}
+    assert call(repo, "GET", "/health", headers={})[0] == 200  # health stays public
+
+
+def test_members_can_read_everything(repo):
+    create(repo, title="Visible", startDate="2026-11-01", dueDate="2026-11-05")
+    assert [t["title"] for t in call(repo, "GET", "/tasks", user=ALICE)[1]["data"]] == ["Visible"]
+    assert call(repo, "GET", "/timeline", user=ALICE)[0] == 200
+
+
+def test_member_created_task_is_assigned_to_them(repo):
+    status, body = call(repo, "POST", "/tasks", {"title": "My task", "priority": "High"}, user=ALICE)
+    task = body["data"]
+    assert status == 201 and (task["assignee"], task["assigneeId"]) == ("Alice", "member-alice")
+    assert call(repo, "PUT", f"/tasks/{task['taskId']}", {"status": "Done"}, user=ALICE)[0] == 200
+
+
+@pytest.mark.parametrize("field,value", [
+    ("startDate", "2026-11-01"), ("dueDate", "2026-11-05"), ("assignee", "Bob"), ("assigneeId", "member-bob"),
+])
+def test_members_cannot_schedule_or_assign_on_create(repo, field, value):
+    assert call(repo, "POST", "/tasks", {"title": "x", field: value}, user=ALICE)[0] == 403
+    assert call(repo, "GET", "/tasks")[1]["data"] == []
+
+
+def test_member_edits_only_their_own_tasks(repo):
+    mine = create(repo, assignee="Alice", assigneeId="member-alice")
+    theirs = create(repo, assignee="Bob", assigneeId="member-bob")
+    unassigned = create(repo)
+    legacy = create(repo, assignee="Alice")  # free-text assignee, not linked to an account
+    update = lambda t, **f: call(repo, "PUT", f"/tasks/{t['taskId']}", f, user=ALICE)  # noqa: E731
+    assert update(mine, status="In Progress", title="Renamed", priority="High")[0] == 200
+    assert repo.get(mine["taskId"])["status"] == "In Progress"
+    for other in (theirs, unassigned, legacy):
+        assert update(other, status="Done")[0] == 403
+        assert repo.get(other["taskId"])["status"] == "To Do"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("startDate", "2026-11-01"), ("dueDate", "2026-11-05"), ("assignee", "Bob"), ("assigneeId", "member-bob"),
+])
+def test_member_cannot_reschedule_or_reassign_their_task(repo, field, value):
+    mine = create(repo, assignee="Alice", assigneeId="member-alice")
+    assert call(repo, "PUT", f"/tasks/{mine['taskId']}", {field: value}, user=ALICE)[0] == 403
+    stored = repo.get(mine["taskId"])
+    assert stored["assigneeId"] == "member-alice" and stored["startDate"] == ""
+
+
+def test_missing_task_is_404_for_members_not_403(repo):
+    assert call(repo, "PUT", "/tasks/ghost", {"status": "Done"}, user=ALICE)[0] == 404
+
+
+def test_member_update_still_validates_payload(repo):
+    mine = create(repo, assignee="Alice", assigneeId="member-alice")
+    assert call(repo, "PUT", f"/tasks/{mine['taskId']}", {"status": "Bad"}, user=ALICE)[0] == 400
+
+
+def test_only_managers_delete_tasks(repo):
+    mine = create(repo, assignee="Alice", assigneeId="member-alice")
+    assert call(repo, "DELETE", f"/tasks/{mine['taskId']}", user=ALICE)[0] == 403
+    assert call(repo, "GET", f"/tasks/{mine['taskId']}")[0] == 200
+    assert call(repo, "DELETE", f"/tasks/{mine['taskId']}", user=MANAGER)[0] == 204
+
+
+def test_manager_assigns_to_a_user_and_free_text_clears_the_link(repo):
+    task = create(repo, assignee="Alice", assigneeId="member-alice", startDate="2026-11-01", dueDate="2026-11-03")
+    assert task["assigneeId"] == "member-alice"
+    path = f"/tasks/{task['taskId']}"
+    assert call(repo, "PUT", path, {"assignee": "Bob", "assigneeId": "member-bob"})[1]["data"]["assigneeId"] == "member-bob"
+    moved = call(repo, "PUT", path, {"assignee": "Someone external"})[1]["data"]
+    assert moved["assignee"] == "Someone external" and moved["assigneeId"] == ""
+    assert call(repo, "PUT", path, {"assigneeId": "x" * 65})[0] == 400

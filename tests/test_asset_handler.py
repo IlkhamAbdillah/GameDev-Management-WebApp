@@ -6,9 +6,11 @@ import boto3
 import pytest
 from moto import mock_aws
 
-HANDLER_DIR = str(Path(__file__).resolve().parents[1] / "backend" / "asset-handler")
-sys.path.insert(0, HANDLER_DIR)
+BACKEND = Path(__file__).resolve().parents[1] / "backend"
+sys.path.insert(0, str(BACKEND / "asset-handler"))
+sys.path.insert(0, str(BACKEND / "shared"))
 
+import auth  # noqa: E402
 import handler  # noqa: E402
 from database import AssetRepository, FolderRepository  # noqa: E402
 from filetypes import file_name_from_key, sanitize_filename  # noqa: E402
@@ -48,14 +50,25 @@ def deps():
         yield AssetRepository(table), AssetStorage.from_bucket_name(BUCKET), FolderRepository(folder_table)
 
 
-def call(deps, method, path, body=None, query=None):
+SECRET = "test-secret-0123456789-0123456789-abcdef"
+MANAGER = ("manager-1", auth.PROJECT_MANAGER, "Pat Manager")
+MEMBER = ("member-alice", auth.MEMBER, "Alice")
+
+
+def bearer(user):
+    token, _ = auth.issue_token(user[0], user[1], user[2], SECRET)
+    return {"authorization": f"Bearer {token}"}
+
+
+def call(deps, method, path, body=None, query=None, user=MANAGER, headers=None):
     event = {
         "rawPath": path,
         "requestContext": {"http": {"method": method}},
         "queryStringParameters": query,
+        "headers": bearer(user) if headers is None else headers,
         "body": json.dumps(body) if body is not None else None,
     }
-    res = handler.handle(event, *deps)
+    res = handler.handle(event, *deps, SECRET)
     return res["statusCode"], json.loads(res["body"]) if "body" in res else None
 
 
@@ -98,8 +111,9 @@ def test_create_ignores_server_controlled_fields(deps):
 
 
 def test_create_requires_json_body(deps):
-    event = {"rawPath": "/assets", "requestContext": {"http": {"method": "POST"}}, "body": "{bad"}
-    assert handler.handle(event, *deps)["statusCode"] == 400
+    event = {"rawPath": "/assets", "requestContext": {"http": {"method": "POST"}},
+             "headers": bearer(MANAGER), "body": "{bad"}
+    assert handler.handle(event, *deps, SECRET)["statusCode"] == 400
 
 
 # ---- read ----
@@ -151,8 +165,9 @@ def test_update_rejects_invalid_and_empty(deps):
 # ---- delete ----
 def test_delete_asset(deps):
     asset = create(deps)
-    event = {"rawPath": f"/assets/{asset['assetId']}", "requestContext": {"http": {"method": "DELETE"}}}
-    res = handler.handle(event, *deps)
+    event = {"rawPath": f"/assets/{asset['assetId']}", "requestContext": {"http": {"method": "DELETE"}},
+             "headers": bearer(MANAGER)}
+    res = handler.handle(event, *deps, SECRET)
     assert res["statusCode"] == 204 and "body" not in res
     assert call(deps, "GET", f"/assets/{asset['assetId']}")[0] == 404
 
@@ -180,8 +195,8 @@ def test_unexpected_error_is_hidden(deps):
         def list(self, **_):
             raise RuntimeError("secret internals")
 
-    event = {"rawPath": "/assets", "requestContext": {"http": {"method": "GET"}}}
-    res = handler.handle(event, Broken(), deps[1], deps[2])
+    event = {"rawPath": "/assets", "requestContext": {"http": {"method": "GET"}}, "headers": bearer(MANAGER)}
+    res = handler.handle(event, Broken(), deps[1], deps[2], SECRET)
     assert res["statusCode"] == 500
     assert "secret" not in res["body"]
 
@@ -321,8 +336,9 @@ def test_replacing_a_file_removes_the_old_object(deps):
 def test_delete_file_clears_key_and_object(deps):
     asset = create(deps)
     attach_file(deps, asset["assetId"])
-    event = {"rawPath": f"/assets/{asset['assetId']}/file", "requestContext": {"http": {"method": "DELETE"}}}
-    assert handler.handle(event, *deps)["statusCode"] == 204
+    event = {"rawPath": f"/assets/{asset['assetId']}/file", "requestContext": {"http": {"method": "DELETE"}},
+             "headers": bearer(MANAGER)}
+    assert handler.handle(event, *deps, SECRET)["statusCode"] == 204
     assert object_keys(deps) == []
     assert call(deps, "GET", f"/assets/{asset['assetId']}")[1]["data"]["s3Key"] == ""
     status, body = call(deps, "DELETE", f"/assets/{asset['assetId']}/file")
@@ -454,8 +470,9 @@ def test_only_empty_folders_can_be_deleted(deps):
     assert call(deps, "DELETE", path(parent))[0] == 400  # has a subfolder
     assert call(deps, "DELETE", path(child))[0] == 400   # has an asset
     call(deps, "DELETE", f"/assets/{asset['assetId']}")
-    event = {"rawPath": path(child), "requestContext": {"http": {"method": "DELETE"}}}
-    assert handler.handle(event, *deps)["statusCode"] == 204
+    event = {"rawPath": path(child), "requestContext": {"http": {"method": "DELETE"}},
+             "headers": bearer(MANAGER)}
+    assert handler.handle(event, *deps, SECRET)["statusCode"] == 204
     assert call(deps, "DELETE", path(parent))[0] == 204
     assert call(deps, "DELETE", "/folders/ghost")[0] == 404
     assert call(deps, "GET", "/folders")[1]["data"] == []
@@ -471,10 +488,46 @@ def test_health_reports_each_dependency_and_returns_503_when_degraded(deps):
             raise RuntimeError("secret internals: arn:aws:...")
 
     event = {"rawPath": "/health", "requestContext": {"http": {"method": "GET"}}}
-    res = handler.handle(event, deps[0], Down(), deps[2])  # bucket down, tables fine
+    res = handler.handle(event, deps[0], Down(), deps[2], SECRET)  # bucket down, tables fine
     body = json.loads(res["body"])
     assert res["statusCode"] == 503 and body["success"] is False
     assert body["data"]["status"] == "degraded"
     assert body["data"]["checks"]["assetsTable"]["ok"] is True
     assert body["data"]["checks"]["bucket"] == {"ok": False, "ms": body["data"]["checks"]["bucket"]["ms"], "error": "RuntimeError"}
     assert "secret" not in res["body"] and "arn:" not in res["body"]  # only an error code, never details
+
+
+# ---- authentication & roles ----
+def test_requests_need_a_valid_token(deps):
+    assert call(deps, "GET", "/assets", headers={})[0] == 401
+    assert call(deps, "GET", "/folders", headers={})[0] == 401
+    assert call(deps, "POST", "/assets", {"assetName": "x", "assetType": "Props"}, headers={})[0] == 401
+    assert call(deps, "GET", "/assets", headers={"authorization": "Bearer a.b.c"})[0] == 401
+    assert call(deps, "GET", "/health", headers={})[0] == 200  # health stays public
+
+
+def test_members_can_read_create_edit_and_upload(deps):
+    asset = call(deps, "POST", "/assets", {"assetName": "Rock", "assetType": "Props"}, user=MEMBER)[1]["data"]
+    assert call(deps, "GET", "/assets", user=MEMBER)[0] == 200
+    assert call(deps, "GET", "/folders", user=MEMBER)[0] == 200
+    assert call(deps, "PUT", f"/assets/{asset['assetId']}", {"status": "Review"}, user=MEMBER)[0] == 200
+    upload = call(deps, "POST", f"/assets/{asset['assetId']}/upload-url", {"fileName": "rock.png", "fileSize": 4}, user=MEMBER)
+    assert upload[0] == 200
+
+
+def test_members_cannot_delete_assets_or_files(deps):
+    asset = create(deps)
+    attach_file(deps, asset["assetId"])
+    assert call(deps, "DELETE", f"/assets/{asset['assetId']}/file", user=MEMBER)[0] == 403
+    assert call(deps, "DELETE", f"/assets/{asset['assetId']}", user=MEMBER)[0] == 403
+    assert len(object_keys(deps)) == 1 and call(deps, "GET", f"/assets/{asset['assetId']}")[0] == 200
+    assert call(deps, "DELETE", f"/assets/{asset['assetId']}", user=MANAGER)[0] == 204
+
+
+def test_members_cannot_manage_folders(deps):
+    root = folder(deps, "Characters")
+    path = f"/folders/{root['folderId']}"
+    assert call(deps, "POST", "/folders", {"name": "Nope"}, user=MEMBER)[0] == 403
+    assert call(deps, "PUT", path, {"name": "Renamed"}, user=MEMBER)[0] == 403
+    assert call(deps, "DELETE", path, user=MEMBER)[0] == 403
+    assert call(deps, "GET", path, user=MEMBER)[1]["data"]["name"] == "Characters"

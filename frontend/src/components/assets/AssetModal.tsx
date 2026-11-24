@@ -2,6 +2,7 @@ import { Download, FileQuestion, Trash2, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { assetsApi, uploadAssetFile } from '../../api/assets'
 import { ALLOWED_EXTENSIONS, TYPE_ICON, formatBytes, previewKindOf, validateFile } from '../../lib/assetUi'
+import { useAuth } from '../../lib/authContext'
 import { folderOptions } from '../../lib/folders'
 import { ASSET_STATUSES, ASSET_TYPES, type Asset, type AssetInput, type Folder } from '../../types'
 import ModelPreview from './ModelPreview'
@@ -21,6 +22,7 @@ const PANEL = 'min-h-72 lg:min-h-[28rem]'
 
 export default function AssetModal({ asset, folders, defaultFolderId, onClose, onSaved, onDeleted }: Props) {
   useEscapeKey(onClose)
+  const { isManager } = useAuth() // deleting assets and files is for project managers
   const options = folderOptions(folders)
   const [current, setCurrent] = useState<Asset | null>(asset)
   const [form, setForm] = useState<AssetInput>({
@@ -163,7 +165,7 @@ export default function AssetModal({ asset, folders, defaultFolderId, onClose, o
                   <a href={current.downloadUrl} className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-surface-2">
                     <Download size={15} /> Download
                   </a>
-                  {confirm === 'file' ? (
+                  {!isManager ? null : confirm === 'file' ? (
                     <span className="flex items-center gap-2 text-sm">
                       <button type="button" disabled={busy} onClick={() => void removeFile()} className="rounded-lg bg-red-600 px-3 py-1.5 font-medium hover:bg-red-500 disabled:opacity-50">Remove</button>
                       <button type="button" onClick={() => setConfirm(null)} className="px-2 text-slate-300">Cancel</button>
@@ -230,7 +232,7 @@ export default function AssetModal({ asset, folders, defaultFolderId, onClose, o
             {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
-              {current ? (
+              {current && isManager ? (
                 confirm === 'asset' ? (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-slate-400">Delete asset and file?</span>

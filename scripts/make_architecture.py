@@ -14,11 +14,11 @@ FRONTEND_COPY = ROOT / "frontend" / "public" / "architecture.png"  # shown on th
 BG, PANEL, LINE, TEXT, MUTED = "#0d111a", "#151b27", "#3a4660", "#e6eaf2", "#8b97ad"
 BLUE, GREEN, ORANGE, PURPLE, RED = "#6d8cff", "#4fbf8b", "#f0a04b", "#b08cff", "#ff7a7a"
 
-fig, ax = plt.subplots(figsize=(16, 9), dpi=130)
+fig, ax = plt.subplots(figsize=(16, 10.6), dpi=130)
 fig.patch.set_facecolor(BG)
 ax.set_facecolor(BG)
 ax.set_xlim(0, 160)
-ax.set_ylim(0, 90)
+ax.set_ylim(0, 106)
 ax.axis("off")
 
 
@@ -36,15 +36,19 @@ def arrow(a, b, color=BLUE, style="-", label="", rad=0.0, lw=1.8, label_xy=None)
         ax.text(x, y, label, ha="center", va="center", color=color, fontsize=8, bbox=dict(fc=BG, ec="none", pad=1.2))
 
 
-ax.text(80, 86, "GameVault — AWS serverless architecture", ha="center", color=TEXT, fontsize=17, fontweight="bold")
-ax.text(80, 82.6, "Manage Assets. Track Progress. Build Games.", ha="center", color=MUTED, fontsize=10)
+ax.text(80, 102, "GameVault — AWS serverless architecture", ha="center", color=TEXT, fontsize=17, fontweight="bold")
+ax.text(80, 98.6, "Manage Assets. Track Progress. Build Games.", ha="center", color=MUTED, fontsize=10)
 
 # security boundary: the AWS account / region
-ax.add_patch(FancyBboxPatch((44, 4), 114, 74, boxstyle="round,pad=0.4,rounding_size=2", fc="none", ec=ORANGE, lw=1.6, linestyle=(0, (6, 4))))
-ax.text(46, 75.2, "AWS account · us-east-1  (security boundary: only the two Function URLs are public)", color=ORANGE, fontsize=8.5, ha="left")
+ax.add_patch(FancyBboxPatch((44, 4), 114, 87, boxstyle="round,pad=0.4,rounding_size=2", fc="none", ec=ORANGE, lw=1.6, linestyle=(0, (6, 4))))
+ax.text(46, 88.4, "AWS account · us-east-1  (security boundary: three public Function URLs; a token is required except on /health and /auth/login)", color=ORANGE, fontsize=8.5, ha="left")
 
 box(3, 37, 34, 18, "Frontend / API client", "React + TS (Vite) · Postman · curl", PURPLE)
 
+# row 0: authentication
+box(50, 73, 34, 12, "Lambda Function URL", "Auth API (HTTPS, CORS)", BLUE)
+box(96, 73, 34, 12, "GameVaultAuthHandler", "Python 3.12 · /auth /users /health", GREEN)
+box(138, 74, 18, 10, "DynamoDB", "GameVaultUsers", ORANGE)
 # row 1: tasks
 box(50, 56, 34, 14, "Lambda Function URL", "Task / Timeline API (HTTPS, CORS)", BLUE)
 box(96, 56, 34, 14, "GameVaultTaskHandler", "Python 3.12 · /tasks /timeline /health", GREEN)
@@ -56,10 +60,13 @@ box(138, 41, 18, 9, "DynamoDB", "GameVaultAssets", ORANGE)
 box(138, 30, 18, 9, "DynamoDB", "GameVaultFolders", ORANGE)
 # row 3: storage + platform services
 box(96, 8, 34, 11, "Amazon S3 (private bucket)", "Block Public Access · SSE-S3", PURPLE)
-box(138, 17.5, 18, 8, "IAM role", "LabRole · both Lambdas", RED)
+box(138, 17.5, 18, 8, "IAM role", "LabRole · all 3 Lambdas", RED)
 box(138, 7, 18, 8, "CloudWatch Logs", "/aws/lambda/…", MUTED)
 
 # request flow
+arrow((37, 54), (50, 79), BLUE, label="1 · REST/JSON\n+ bearer token", label_xy=(40, 69))
+arrow((84, 79), (96, 79), BLUE, label="2 · invoke")
+arrow((130, 79), (138, 79), GREEN, label="3 · data", label_xy=(134, 81.5))
 arrow((37, 51), (50, 63), BLUE, label="1 · REST/JSON", label_xy=(40.5, 59.5))
 arrow((37, 43), (50, 39), BLUE, label="1 · REST/JSON", label_xy=(41.5, 37))
 arrow((84, 63), (96, 63), BLUE, label="2 · invoke")
@@ -78,7 +85,7 @@ for i, (c, st, t) in enumerate([(BLUE, "-", "Request flow"), (GREEN, "-", "Data 
     y = 24.5 - i * 3.2
     ax.plot([3, 9], [y, y], color=c, lw=2, linestyle=st if st != "--" else (0, (5, 3)))
     ax.text(11, y, t, color=MUTED, fontsize=8, va="center")
-ax.text(3, 9, "No authentication in the academic MVP\n(documented limitation).", color=RED, fontsize=8, va="center")
+ax.text(3, 9, "Sign-in: scrypt password → HS256 JWT (8 h),\nverified inside every Lambda (Function URLs\nhave no authorizer). Roles: project manager, member.", color=RED, fontsize=8, va="center")
 
 fig.savefig(OUT, facecolor=BG, bbox_inches="tight", pad_inches=0.3)
 FRONTEND_COPY.parent.mkdir(exist_ok=True)

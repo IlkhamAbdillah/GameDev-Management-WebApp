@@ -18,6 +18,7 @@ function recorder() {
 const healthy = (checks: HealthResult['checks'], status: 'ok' | 'degraded' = 'ok', httpStatus = 200): HealthResult => ({ reachable: true, httpStatus, roundTripMs: 240, status, checks })
 const assetOk = healthy({ assetsTable: { ok: true, ms: 166 }, foldersTable: { ok: true, ms: 104 }, bucket: { ok: true, ms: 100 } })
 const taskOk = healthy({ tasksTable: { ok: true, ms: 148 } })
+const authOk = healthy({ usersTable: { ok: true, ms: 120 } })
 
 describe('runHealthFlow', () => {
   it('walks client → URL → Lambda → each dependency → back to the client', async () => {
@@ -74,10 +75,12 @@ describe('runHealthFlow', () => {
 })
 
 describe('runAllChecks', () => {
-  it('runs the asset flow before the task flow and infers IAM and CloudWatch', async () => {
+  it('runs the asset, task and auth flows in that order and infers IAM and CloudWatch', async () => {
     const r = recorder()
-    await runAllChecks({ asset: async () => assetOk, task: async () => taskOk }, r.hooks)
+    await runAllChecks({ asset: async () => assetOk, task: async () => taskOk, auth: async () => authOk }, r.hooks)
     expect(r.hops.indexOf('client>assetUrl')).toBeLessThan(r.hops.indexOf('client>taskUrl'))
+    expect(r.hops.indexOf('client>taskUrl')).toBeLessThan(r.hops.indexOf('client>authUrl'))
+    expect(r.nodes.usersTable).toMatchObject({ state: 'ok', ms: 120 })
     expect(r.nodes.iam?.state).toBe('inferred')
     expect(r.nodes.cloudwatch?.state).toBe('inferred')
   })
@@ -85,14 +88,14 @@ describe('runAllChecks', () => {
   it('points at IAM when the Lambdas are denied access', async () => {
     const r = recorder()
     const denied = (name: string) => healthy({ [name]: { ok: false, ms: 5, error: 'AccessDeniedException' } }, 'degraded', 503)
-    await runAllChecks({ asset: async () => denied('assetsTable'), task: async () => denied('tasksTable') }, r.hooks)
+    await runAllChecks({ asset: async () => denied('assetsTable'), task: async () => denied('tasksTable'), auth: async () => denied('usersTable') }, r.hooks)
     expect(r.nodes.iam).toMatchObject({ state: 'failed', error: 'AccessDeniedException' })
   })
 
   it('leaves IAM and CloudWatch unknown when nothing is reachable', async () => {
     const r = recorder()
     const down: HealthResult = { reachable: false, roundTripMs: 0, checks: {}, error: 'Cannot reach the server' }
-    await runAllChecks({ asset: async () => down, task: async () => down }, r.hooks)
+    await runAllChecks({ asset: async () => down, task: async () => down, auth: async () => down }, r.hooks)
     expect(r.nodes.iam?.state).toBe('unknown')
     expect(r.nodes.cloudwatch?.state).toBe('unknown')
   })

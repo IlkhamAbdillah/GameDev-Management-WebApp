@@ -1,7 +1,9 @@
-import { Activity, BookOpen, Boxes, CalendarRange, KanbanSquare, Vault } from 'lucide-react'
+import { Activity, BookOpen, Boxes, CalendarRange, KanbanSquare, LogIn, LogOut, Users, Vault } from 'lucide-react'
 import { useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
+import { useAuth } from '../lib/authContext'
 import { refreshStatuses } from '../lib/connectivityStore'
+import { ROLE_LABEL } from '../lib/roles'
 
 const NAV = [
   { to: '/assets', label: 'Assets', icon: Boxes },
@@ -9,12 +11,16 @@ const NAV = [
   { to: '/timeline', label: 'Timeline', icon: CalendarRange },
 ]
 
+const MANAGER_NAV = [{ to: '/team', label: 'Team', icon: Users }]
+
 const SYSTEM_NAV = [
   { to: '/docs', label: 'Docs', icon: BookOpen },
   { to: '/connectivity', label: 'Connectivity', icon: Activity },
 ]
 
 export default function Layout() {
+  const { user, isManager, logout } = useAuth()
+  const workNav = user ? [...NAV, ...(isManager ? MANAGER_NAV : [])] : [] // docs and connectivity stay public
   // Quiet health check when the app loads, so the Connectivity page already has its statuses.
   useEffect(() => {
     void refreshStatuses()
@@ -34,7 +40,7 @@ export default function Layout() {
         </div>
 
         <nav className="flex flex-1 flex-wrap gap-1 md:flex-col md:flex-nowrap">
-          {[...NAV, null, ...SYSTEM_NAV].map((item) =>
+          {[...workNav, null, ...SYSTEM_NAV].map((item) =>
             item === null ? (
               <div key="system" className="hidden px-3 pt-4 pb-1 text-[11px] font-medium tracking-wide text-slate-500 uppercase md:block">System</div>
             ) : (
@@ -54,9 +60,22 @@ export default function Layout() {
           )}
         </nav>
 
-        <div className="hidden rounded-xl border border-line bg-bg/40 p-3 text-xs text-slate-400 md:block">
-          <div className="font-medium text-slate-200">Indie Workspace</div>
-          <div>us-east-1 · Serverless</div>
+        <div className="rounded-xl border border-line bg-bg/40 p-3 text-xs text-slate-400">
+          {user ? (
+            <>
+              <div className="truncate font-medium text-slate-200">{user.name}</div>
+              <div className="truncate">{ROLE_LABEL[user.role]}</div>
+              <div className="mt-2 flex gap-1">
+                <button onClick={logout} className="flex items-center gap-1 rounded-md px-1.5 py-1 hover:bg-surface-2 hover:text-slate-200">
+                  <LogOut size={12} /> Sign out
+                </button>
+              </div>
+            </>
+          ) : (
+            <Link to="/login" className="flex items-center gap-1.5 font-medium text-slate-200 hover:text-white">
+              <LogIn size={14} /> Sign in
+            </Link>
+          )}
         </div>
       </aside>
 
