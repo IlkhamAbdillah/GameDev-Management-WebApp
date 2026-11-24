@@ -4,7 +4,7 @@
 
 Lightweight game-development workspace for small indie teams: asset library (Assets), Kanban task board (Tasks) and Gantt-style schedule (Timeline). Built on an AWS serverless stack.
 
-> Status: **Phase 1** (Asset CRUD API), **Phase 2** (Task API + Kanban) and **Phase 3** (Timeline API + Gantt chart) implemented. S3 upload/download and the Assets UI are Phase 4 (see `plan.md`).
+> Status: **Phases 1–4** implemented: Asset CRUD + S3 file upload/download/preview, Task API + Kanban, Timeline API + Gantt chart. Phase 5 (polish, extra tests, final docs) remains (see `plan.md`).
 
 ## Architecture
 
@@ -37,7 +37,7 @@ Also in Learner Lab: IAM roles cannot be created, so `LabRole` is used. Least-pr
 
 ## Project layout
 ```
-backend/asset-handler/   handler.py (routing) · database.py (DynamoDB) · storage.py (S3) · validation.py
+backend/asset-handler/   handler.py (routing) · database.py (DynamoDB) · storage.py (S3, pre-signed URLs) · validation.py · filetypes.py · folders.py (tree rules)
 backend/task-handler/    handler.py · database.py · validation.py
 frontend/                React + TypeScript + Vite + Tailwind (Tasks Kanban board, Timeline Gantt chart)
 scripts/deploy.py        idempotent provisioning + deploy (boto3)
@@ -59,7 +59,7 @@ python3 -m venv .venv && .venv/bin/pip install boto3 pytest moto
    .venv/bin/python scripts/deploy.py
    ```
    It creates/updates the DynamoDB tables, private S3 bucket, both Lambdas and their Function URLs, and writes the URLs to `.aws/outputs.json`.
-   Some Learner Lab sessions deny `dynamodb:CreateTable`; the script then warns — create the table in the console (partition key as printed, String, on-demand) and rerun.
+   Some Learner Lab sessions deny `dynamodb:CreateTable` (it is denied for the `voclabs` role); the script then warns — create the table in the console (partition key as printed, String, on-demand) and rerun.
 3. Smoke test: `curl $ASSET_URL/health` and `curl $TASK_URL/health`.
 
 ## Frontend
@@ -68,6 +68,8 @@ cd frontend
 cp .env.example .env.local   # fill in assetApiUrl / taskApiUrl from .aws/outputs.json
 npm install && npm run dev
 ```
+Assets: nested folders (create/rename/move/delete-when-empty, breadcrumb, drag an asset onto a folder to move it), grid/list view, search (across all folders) + category/status filters, create/edit/delete, direct-to-S3 upload with progress, download, and inline preview: images (thumbnails), audio, and **`.glb` 3D models** (interactive rotate/zoom via `<model-viewer>`, loaded lazily). Clicking an asset opens a two-column dialog: a large preview on the left (a newly chosen file previews before it is uploaded) and the details (name, category, status, folder, assignee, description) on the right. In the grid, `.glb` models get a rendered thumbnail: models are rendered one at a time in the browser, captured as a PNG and cached in IndexedDB by S3 key, so each model is rendered once per browser (not stored on the server). Other 3D formats (fbx/obj/gltf) and files are download-only.
+
 Timeline: simplified Gantt chart (bar position = start date, length = duration, colour = status: gray/blue/orange/green), range navigation (prev/next/today, 2 weeks to 3 months), status and category filters, red/amber highlighting for overdue and due-within-3-days tasks, and completion statistics. It calls `GET /timeline` for the visible window, so edits made on the Tasks page show up on the next load.
 
 Kanban supports drag-and-drop between columns (optimistic update with rollback), create/edit/delete, and search/status/priority/category/assignee filters (applied client-side over the fetched list).

@@ -69,3 +69,45 @@ export interface TimelineQuery {
   category?: string
   assignee?: string
 }
+
+export const ASSET_TYPES = ['Character', 'Environment', 'Props', 'Animation', 'Audio', 'UI', 'VFX', 'Other'] as const
+export const ASSET_STATUSES = ['Planned', 'In Progress', 'Review', 'Completed'] as const
+
+export type AssetType = (typeof ASSET_TYPES)[number]
+export type AssetStatus = (typeof ASSET_STATUSES)[number]
+
+export interface Asset {
+  assetId: string
+  assetName: string
+  assetType: AssetType
+  description: string
+  assignedTo: string
+  status: AssetStatus
+  s3Key: string
+  createdAt: string
+  updatedAt: string
+  // computed by the API (short-lived pre-signed URLs, never stored)
+  fileName: string
+  downloadUrl: string
+  previewUrl: string
+  previewKind: 'image' | 'audio' | 'model' | ''
+  folderId: string // '' = root
+}
+
+export type AssetInput = Pick<Asset, 'assetName' | 'assetType' | 'description' | 'assignedTo' | 'status' | 'folderId'>
+
+export interface Folder {
+  folderId: string
+  name: string
+  parentId: string // '' = root
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UploadTicket {
+  uploadUrl: string
+  method: 'PUT'
+  headers: Record<string, string>
+  s3Key: string
+  expiresIn: number
+}

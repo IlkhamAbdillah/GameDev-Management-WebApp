@@ -1,0 +1,25 @@
+### /health
+{"success": true, "data": {"status": "ok", "dynamodb": "ok", "s3": "ok"}}
+### create nested folders Characters > Hero
+Characters=65229e75-b79e-4d49-93c0-a2d74ebdfd65 Hero=645aa571-66bc-4aad-ad5a-176c27513f4b
+### duplicate name
+{"success": false, "message": "A folder with this name already exists here"} HTTP 400
+### move folder into its own child (cycle)
+{"success": false, "message": "A folder cannot be moved into itself or one of its subfolders"} HTTP 400
+### asset in folder
+asset=db596169-0f52-46a8-9dfb-6b496302d62f
+### delete non-empty folder
+{"success": false, "message": "Folder is not empty. Move or delete its contents first"} HTTP 400
+### upload a real .glb (minimal valid glTF binary)
+PUT to S3: HTTP 200  (Content-Type model/gltf-binary)
+{'fileName': 'tri.glb', 'previewKind': 'model', 'folderId': '645aa571-66bc-4aad-ad5a-176c27513f4b'} previewUrl True
+### browser-style fetch of the preview (CORS + content-type)
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: *
+Content-Type: model/gltf-binary
+### list by folder
+['Knight']
+### cleanup
+delete asset HTTP 204
+delete Hero HTTP 204
+delete Characters HTTP 204

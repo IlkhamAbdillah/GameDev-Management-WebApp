@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 
 REGION = "us-east-1"
 ROOT = Path(__file__).resolve().parents[1]
-TABLES = {"GameVaultAssets": "assetId", "GameVaultTasks": "taskId"}
+TABLES = {"GameVaultAssets": "assetId", "GameVaultFolders": "folderId", "GameVaultTasks": "taskId"}
 ROLE_NAME = "LabRole"  # Learner Lab: IAM role creation is not available
 OUTPUT = ROOT / ".aws" / "outputs.json"
 
@@ -28,7 +28,7 @@ FUNCTIONS = {
     "asset": {
         "name": "GameVaultAssetHandler",
         "dir": ROOT / "backend" / "asset-handler",
-        "env": {"ASSETS_TABLE": "GameVaultAssets", "ASSET_BUCKET": BUCKET},
+        "env": {"ASSETS_TABLE": "GameVaultAssets", "FOLDERS_TABLE": "GameVaultFolders", "ASSET_BUCKET": BUCKET},
     },
     "task": {
         "name": "GameVaultTaskHandler",

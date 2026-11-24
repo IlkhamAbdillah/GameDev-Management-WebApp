@@ -1,0 +1,28 @@
+### create asset
+assetId=73a256ac-d0d6-4367-9ea7-d3a49dfb1427
+### POST upload-url
+{"success": true, "data": {"uploadUrl": "https://gamevault-assets-792897905750.s3.amazonaws.com/assets/73a256ac-d0d6-4367-9ea7-d3a4...", "method": "PUT", "headers": {"Content-Type": "image/png"}, "s3Key": "assets/73a256ac-d0d6-4367-9ea7-d3a49dfb1427/b1bb2c3a874f4b0f80f1f9fc4de5ac0c-hero.png", "expiresIn": 300}}
+### PUT file to S3 via pre-signed URL
+HTTP 200
+### PUT upload with WRONG size (should be rejected by S3)
+HTTP 403
+### PUT upload with WRONG content-type (should be rejected)
+HTTP 403
+### save s3Key on asset
+{'description': '', 'status': 'Planned', 'createdAt': '2026-11-24T02:11:45.854951Z', 'assetType': 'UI', 'updatedAt': '2026-11-24T02:11:51.176582Z', 'assetName': 'Hero Icon', 's3Key': 'assets/73a256ac-d0d6-4367-9ea7-d3a49dfb1427/b1bb2c3a874f4b0f80f1f9fc4de5ac0c-hero.png', 'assetId': '73a256ac-d0d6-4367-9ea7-d3a49dfb1427', 'assignedTo': '', 'fileName': 'hero.png', 'downloadUrl': 'https://gamevault-assets-792897905750.s3.amazonaws.com/assets/73a256ac...', 'previewUrl': 'https://gamevault-assets-792897905750.s3.amazonaws.com/assets/73a256ac...', 'previewKind': 'image'}
+### download via pre-signed GET
+HTTP/1.1 200 OK
+Content-Type: image/png
+Content-Disposition: attachment; filename="hero.png"
+downloaded bytes identical
+### disallowed type
+{"success": false, "message": "File type not allowed. Allowed: .anim, .blend, .bvh, .fbx, .glb, .gltf, .jpeg, .jpg, .json, .mp3, .obj, .ogg, .png, .wav, .webp, .zip"} HTTP 400
+### too large
+{"success": false, "message": "File is too large. Maximum size is 100 MB"} HTTP 400
+### s3 objects for asset
+['assets/73a256ac-d0d6-4367-9ea7-d3a49dfb1427/b1bb2c3a874f4b0f80f1f9fc4de5ac0c-hero.png']
+### DELETE /file
+HTTP 204
+### DELETE asset
+HTTP 204
+objects left: []

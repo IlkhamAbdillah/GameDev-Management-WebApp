@@ -82,5 +82,42 @@ Response `data`:
 
 Real captured output: `docs/evidence/timeline-api-test-output.txt`.
 
-## Planned (later phases)
-`POST /assets/{id}/upload-url`, `DELETE /assets/{id}/file` (Phase 4).
+## Folders (Phase 4) — `assetApiUrl`
+Folders organise assets in a tree (max 10 levels). They belong to the Assets module and are stored in `GameVaultFolders`.
+
+| Method | Path | Description | Success |
+|---|---|---|---|
+| POST | `/folders` | `{"name": "Hero", "parentId": ""}` (`parentId` empty = top level) | 201 |
+| GET | `/folders` | All folders, flat, sorted by name (clients build the tree from `parentId`) | 200 |
+| GET | `/folders/{folderId}` | Folder details | 200 |
+| PUT | `/folders/{folderId}` | Rename and/or move (`name`, `parentId`) | 200 |
+| DELETE | `/folders/{folderId}` | Delete an **empty** folder | 204 |
+
+Rules: name 1–60 chars without `/` or `\\`; sibling names are unique (case-insensitive); the parent must exist; a folder cannot be moved into itself or a descendant; a folder with subfolders or assets cannot be deleted (400). Assets carry `folderId` (`""` = top level; assets created before folders existed count as top level). Set or change it with `POST /assets` / `PUT /assets/{id}`; the folder must exist (400 otherwise). `GET /assets?folderId=<id>` filters by folder (`folderId=` for top level).
+
+Real captured run: `docs/evidence/folders-glb-test-output.txt`.
+
+## Asset files (Phase 4) — `assetApiUrl`
+Files go **directly browser → S3** through pre-signed URLs; the Lambda never handles file bytes.
+
+| Method | Path | Description | Success |
+|---|---|---|---|
+| POST | `/assets/{assetId}/upload-url` | Body `{"fileName": "hero.png", "fileSize": 2048}`. Returns a pre-signed PUT URL | 200 |
+| PUT | `/assets/{assetId}` with `{"s3Key": "..."}` | Attach the uploaded file to the asset | 200 |
+| DELETE | `/assets/{assetId}/file` | Delete the file from S3 and clear `s3Key` | 204 (404 if the asset has no file) |
+
+Flow:
+1. `POST /assets/{id}/upload-url` → `{uploadUrl, method: "PUT", headers: {"Content-Type": "..."}, s3Key, expiresIn: 300}`
+2. `PUT uploadUrl` with the file as body and **exactly** the returned headers.
+3. `PUT /assets/{id}` `{"s3Key": s3Key}`. The API checks that the key lives under `assets/{assetId}/` and that the object exists; replacing a file deletes the old object.
+
+Rules (server-enforced):
+- Allowed extensions: `.fbx .obj .glb .gltf .png .jpg .jpeg .webp .wav .mp3 .ogg .anim .bvh .blend .zip .json`; content type is chosen by the server from the extension.
+- Max size 100 MB (env `MAX_UPLOAD_BYTES`). Content-Type and Content-Length are part of the signature: S3 answers 403 if the upload differs from what was requested.
+- File names are sanitised (no paths, `[A-Za-z0-9._-]` only). Keys look like `assets/{assetId}/{random}-{name}`.
+- `s3Key` cannot be set on create, cannot be cleared via PUT (use `DELETE .../file`) and cannot point at another asset's file.
+- `DELETE /assets/{id}` also deletes every object under that asset's own prefix (including uploads that were never attached), and nothing else.
+
+Computed fields on every asset response (not stored, URLs valid ~15 min): `fileName`, `downloadUrl` (forces download), `previewUrl` and `previewKind` (`"image"` for png/jpg/jpeg/webp, `"audio"` for wav/mp3/ogg, `"model"` for `.glb`, otherwise empty: fbx/obj/gltf/other files are download-only), and `folderId`.
+
+Real captured run against S3: `docs/evidence/asset-files-test-output.txt`.
