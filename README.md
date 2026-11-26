@@ -34,6 +34,7 @@ backend/shared/auth.py   scrypt password hashing, HS256 JWT, roles (bundled into
 frontend/                React + TypeScript + Vite + Tailwind (Tasks Kanban board, Timeline Gantt chart)
 scripts/deploy.py        idempotent provisioning + deploy (boto3)
 scripts/seed_admin.py    creates the first project-manager account
+scripts/deploy_all.sh    one-shot deploy: tables, Lambdas, .env.local, health, 1 PM + 3 members
 tests/                   pytest + moto unit tests
 docs/                    design brief, database design, API docs, evidence/
 ```
@@ -45,6 +46,8 @@ python3 -m venv .venv && .venv/bin/pip install boto3 pytest moto
 ```
 
 ## Deploy
+**Shortcut:** `scripts/deploy_all.sh` (add `--smoke` for the live smoke test, `--no-users` to skip accounts) runs steps 2-4 below with the right profile for each step, writes `frontend/.env.local` from `.aws/outputs.json`, and creates one project manager plus three members (emails via `GV_ADMIN_EMAIL` / `GV_MEMBER_EMAILS`, passwords prompted or from `GV_ADMIN_PASSWORD` / `GV_MEMBER_PASSWORD`). It needs both `[default]` and `[awsstudent]` in `.aws/credentials`, in the same AWS account.
+
 1. Start the Learner Lab and copy the CLI credentials (`aws_access_key_id`, `aws_secret_access_key`, `aws_session_token`) into `.aws/credentials` (git-ignored) and `region=us-east-1` into `.aws/config`.
 2. Run:
    ```bash
