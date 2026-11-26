@@ -8,7 +8,7 @@ const field = 'w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outl
 export default function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
-  const from = (useLocation().state as { from?: string } | null)?.from ?? '/tasks'
+  const from = (useLocation().state as { from?: string } | null)?.from ?? '/dashboard'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)

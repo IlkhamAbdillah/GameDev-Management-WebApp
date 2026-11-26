@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Boxes, CalendarRange, KanbanSquare, LogIn, LogOut, Users, Vault } from 'lucide-react'
+import { Activity, BookOpen, Boxes, CalendarRange, KanbanSquare, LayoutDashboard, LogIn, LogOut, Users, Vault } from 'lucide-react'
 import { useEffect } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/authContext'
@@ -6,6 +6,7 @@ import { refreshStatuses } from '../lib/connectivityStore'
 import { ROLE_LABEL } from '../lib/roles'
 
 const NAV = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/assets', label: 'Assets', icon: Boxes },
   { to: '/tasks', label: 'Tasks', icon: KanbanSquare },
   { to: '/timeline', label: 'Timeline', icon: CalendarRange },

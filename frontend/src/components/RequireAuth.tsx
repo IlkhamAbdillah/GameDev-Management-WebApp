@@ -6,6 +6,6 @@ export default function RequireAuth({ manager = false }: { manager?: boolean }) 
   const { user, isManager } = useAuth()
   const location = useLocation()
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
-  if (manager && !isManager) return <Navigate to="/tasks" replace />
+  if (manager && !isManager) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }

@@ -93,8 +93,8 @@ export default function DocsPage() {
             <p className="text-sm leading-relaxed text-slate-300">
               <strong>GameVault</strong> is a lightweight workspace for small indie game teams. It combines three modules: <strong>Assets</strong> (a library of game files with folders and in-browser preview), <strong>Tasks</strong> (a Kanban board) and <strong>Timeline</strong> (a Gantt-style schedule). Assets and Tasks are independent: they share no database relationship. The Timeline has no storage of its own; it is derived from task records, so any change to a task shows up on the next load.
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {[['Assets', 'Nested folders, upload/download through S3, previews for images, audio and .glb 3D models.'], ['Tasks', 'Kanban with drag-and-drop, filters, search and deadline highlighting.'], ['Timeline', 'Gantt bars by status, date-range navigation and completion statistics.']].map(([t, d]) => (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[['Dashboard', 'This week per role: open tasks, overdue, review queue, team workload for managers.'], ['Assets', 'Nested folders, upload/download through S3, previews for images, audio and .glb 3D models.'], ['Tasks', 'Kanban with drag-and-drop, filters, search and deadline highlighting.'], ['Timeline', 'Gantt bars by status, date-range navigation and completion statistics.']].map(([t, d]) => (
                 <div key={t} className="rounded-xl border border-line bg-surface p-3"><div className="text-sm font-medium">{t}</div><p className="mt-1 text-xs text-slate-400">{d}</p></div>
               ))}
             </div>
