@@ -34,10 +34,19 @@ backend/shared/auth.py   scrypt password hashing, HS256 JWT, roles (bundled into
 frontend/                React + TypeScript + Vite + Tailwind (Tasks Kanban board, Timeline Gantt chart)
 scripts/deploy.py        idempotent provisioning + deploy (boto3)
 scripts/seed_admin.py    creates the first project-manager account
+run.sh                   one command from a fresh clone: checks tools, installs deps, deploy_all.sh, npm run dev
 scripts/deploy_all.sh    one-shot deploy: tables, Lambdas, .env.local, health, 1 PM + 3 members
 tests/                   pytest + moto unit tests
 docs/                    design brief, database design, API docs, evidence/
 ```
+
+## Quick start (fresh clone, Linux/macOS/WSL)
+Needs only `python3` (with `venv`), Node.js >= 20.19 and npm.
+```bash
+./run.sh            # 1st run creates .aws/credentials as a template and stops: fill it in
+./run.sh            # venv + requirements.txt, npm ci, deploy (scripts/deploy_all.sh), accounts, npm run dev
+```
+Options: `--smoke` (live smoke test), `--no-users`, `--no-deploy` (only start the frontend), `--no-dev`. `.aws/credentials` needs the lab's `[default]` block and the `[awsstudent]` key of the same account. Dependencies are re-installed only when `requirements.txt` / `package-lock.json` change.
 
 ## Run tests
 ```bash

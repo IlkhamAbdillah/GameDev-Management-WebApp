@@ -1,0 +1,4 @@
+# Python tooling for deploy/seed/smoke scripts and the backend tests. run.sh installs this into .venv.
+boto3
+pytest
+moto
