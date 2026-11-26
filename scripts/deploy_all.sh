@@ -2,8 +2,10 @@
 # One-shot GameVault deployment for the AWS Learner Lab.
 #
 #   scripts/deploy_all.sh            # tables -> bucket/Lambdas/URLs -> frontend/.env.local -> health -> accounts
+#                                    #   -> demo data (folders + assets uploaded to S3 from sample-assets/, tasks)
 #   scripts/deploy_all.sh --smoke    # ... and run the live smoke test (output saved to docs/evidence/)
 #   scripts/deploy_all.sh --no-users # skip creating accounts
+#   scripts/deploy_all.sh --no-seed  # skip the demo data (scripts/seed_data.py; idempotent, safe to re-run)
 #
 # Why two profiles: the default `voclabs` role can deploy Lambdas (PassRole) but cannot CreateTable or
 # write DynamoDB items; `awsstudent` can write DynamoDB but cannot create Lambdas. So tables and
@@ -15,6 +17,7 @@
 #                      GV_MEMBER_NAMES  (default "Member 1|Member 2|Member 3", |-separated)
 # Passwords come from GV_ADMIN_PASSWORD / GV_MEMBER_PASSWORD or are prompted for (no echo).
 # All members share one password; each person can change it in the app.
+# Demo data is created through the API as the project manager, so it needs that password too.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,11 +26,13 @@ PY="$ROOT/.venv/bin/python"
 
 SMOKE=0
 USERS=1
+SEED=1
 for arg in "$@"; do
   case "$arg" in
     --smoke) SMOKE=1 ;;
     --no-users) USERS=0 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    --no-seed) SEED=0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -67,10 +72,12 @@ read -ra MEMBER_EMAILS <<< "${GV_MEMBER_EMAILS:-member1@gamevault.dev member2@ga
 IFS='|' read -ra MEMBER_NAMES <<< "${GV_MEMBER_NAMES:-Member 1|Member 2|Member 3}"
 (( ${#MEMBER_EMAILS[@]} == ${#MEMBER_NAMES[@]} )) || fail "GV_MEMBER_EMAILS and GV_MEMBER_NAMES have different lengths"
 
-if (( USERS )); then
-  ADMIN_PASSWORD="${GV_ADMIN_PASSWORD:-}"
-  MEMBER_PASSWORD="${GV_MEMBER_PASSWORD:-}"
+ADMIN_PASSWORD="${GV_ADMIN_PASSWORD:-}"
+MEMBER_PASSWORD="${GV_MEMBER_PASSWORD:-}"
+if (( USERS || SEED )); then
   [[ -n "$ADMIN_PASSWORD" ]]  || read_password "Password for project manager $ADMIN_EMAIL" ADMIN_PASSWORD
+fi
+if (( USERS )); then
   [[ -n "$MEMBER_PASSWORD" ]] || read_password "Shared password for the ${#MEMBER_EMAILS[@]} members" MEMBER_PASSWORD
 fi
 
@@ -134,10 +141,16 @@ if (( USERS )); then
     GV_ADMIN_PASSWORD="$MEMBER_PASSWORD" as_awsstudent "$PY" scripts/seed_admin.py \
       --email "${MEMBER_EMAILS[$i]}" --name "${MEMBER_NAMES[$i]}" --role member
   done
-  unset ADMIN_PASSWORD MEMBER_PASSWORD
 fi
 
-# --- 7. optional smoke test ------------------------------------------------------------------------
+# --- 7. demo data through the API (folders, assets + S3 files, tasks) ------------------------------
+if (( SEED )); then
+  step "Demo data (sample-assets/ -> folders, assets, S3; tasks)"
+  GV_ADMIN_PASSWORD="$ADMIN_PASSWORD" "$PY" scripts/seed_data.py --email "$ADMIN_EMAIL"
+fi
+unset ADMIN_PASSWORD MEMBER_PASSWORD
+
+# --- 8. optional smoke test ------------------------------------------------------------------------
 if (( SMOKE )); then
   step "Live smoke test"
   as_default "$PY" scripts/smoke_test.py | tee docs/evidence/smoke-test-output.txt

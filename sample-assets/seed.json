@@ -1,0 +1,9 @@
+{
+  "models/genshin_impact_-_furina.glb": {
+    "assetType": "Character",
+    "description": "Character model used to test the 3D preview."
+  },
+  "art/Cherry Blossom Background.webp": {
+    "description": "Background art for the title screen."
+  }
+}

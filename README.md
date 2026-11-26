@@ -37,6 +37,8 @@ scripts/seed_admin.py    creates the first project-manager account
 scripts/deploy_all.sh    one-shot deploy: tables, Lambdas, .env.local, health, 1 PM + 3 members
 tests/                   pytest + moto unit tests
 docs/                    design brief, database design, API docs, evidence/
+sample-assets/           demo game files (+ optional seed.json overrides) uploaded by scripts/seed_data.py
+scripts/seed_data.py     demo data via the API: folders + assets (files to S3) from sample-assets/, tasks; idempotent
 ```
 
 ## Run tests
@@ -61,7 +63,12 @@ python3 -m venv .venv && .venv/bin/pip install boto3 pytest moto
    AWS_PROFILE=awsstudent .venv/bin/python scripts/seed_admin.py --email you@example.com --name "Your Name"
    ```
    Further accounts are added by a project manager on the **Team** page.
-4. Smoke test: `curl $ASSET_URL/health`, `curl $TASK_URL/health`, `curl $AUTH_URL/health` (or open the Connectivity page).
+4. Optional demo data (folders + assets with their files uploaded to S3 from `sample-assets/`, and ~13 tasks spread around today, assigned to the members). It goes through the API as the project manager, so it needs no AWS credentials; it is idempotent (existing folder/asset/task names are skipped), `--dry-run` shows the plan:
+   ```bash
+   .venv/bin/python scripts/seed_data.py --email you@example.com
+   ```
+   Every directory becomes a folder, every allowed file an asset (type from the top-level directory, e.g. `models/` → Props, `audio/` → Audio); `sample-assets/seed.json` can override `assetType`/`description`/`status`/`assetName` per file. `scripts/deploy_all.sh` runs it automatically (`--no-seed` to skip).
+5. Smoke test: `curl $ASSET_URL/health`, `curl $TASK_URL/health`, `curl $AUTH_URL/health` (or open the Connectivity page).
 
 ## Frontend
 ```bash
@@ -83,7 +90,7 @@ Credentials expire with each lab session; rerun step 1 and the script is safe to
 
 ## Testing
 ```bash
-.venv/bin/python -m pytest tests -q          # 165 backend tests (moto)
+.venv/bin/python -m pytest tests -q          # 170 backend tests (moto)
 cd frontend && npm test && npm run build     # 76 unit tests + strict type-check/build
 .venv/bin/python scripts/smoke_test.py       # 80 live checks against the deployed AWS stack (creates and removes its own throw-away accounts; needs the awsstudent profile)
 ```
